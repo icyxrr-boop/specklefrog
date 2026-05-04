@@ -10,27 +10,73 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyDlcI_JtmeNMcJxvjvUER5W1ROCH0uOfn4",
-            authDomain: "test-83d1d.firebaseapp.com",
-            databaseURL: "https://test-83d1d-default-rtdb.firebaseio.com",
-            projectId: "test-83d1d",
-            storageBucket: "test-83d1d.firebasestorage.app",
-            messagingSenderId: "1060438880379",
-            appId: "1:1060438880379:web:a22b03441ea97c16b3b2de"
-        };
+        // Strictly use the injected environment configuration to ensure correct permissions
+        let firebaseConfig;
+        if (typeof __firebase_config !== 'undefined') {
+            firebaseConfig = JSON.parse(__firebase_config);
+        } else {
+            firebaseConfig = {
+                apiKey: "AIzaSyDlcI_JtmeNMcJxvjvUER5W1ROCH0uOfn4",
+                authDomain: "test-83d1d.firebaseapp.com",
+                databaseURL: "https://test-83d1d-default-rtdb.firebaseio.com",
+                projectId: "test-83d1d",
+                storageBucket: "test-83d1d.firebasestorage.app",
+                messagingSenderId: "1060438880379",
+                appId: "1:1060438880379:web:a22b03441ea97c16b3b2de"
+            };
+        }
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        // Use exactly 'default-app-id' as the fallback to guarantee backend security rule matches
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-        window.frogAuth = {
-            auth,
-            login: (email, pass) => signInWithEmailAndPassword(auth, email, pass),
-            signup: (email, pass) => createUserWithEmailAndPassword(auth, email, pass),
-            logout: () => signOut(auth)
+        // Make necessary tools available to the global scope securely
+        window.frogApp = {
+            db,
+            appId,
+            collection,
+            addDoc,
+            onSnapshot,
+            doc,
+            setDoc,
+            user: null,
+            profileName: 'Guest Frog'
         };
+
+        // Mandatory Auth Flow with safe fallbacks
+        const initAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    try {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } catch (tokenError) {
+                        console.warn("Custom token failed, falling back to anonymous...", tokenError);
+                        await signInAnonymously(auth);
+                    }
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Auth init failed completely:", error);
+            }
+        };
+
+        // Wait for authentication to complete before triggering any database interactions
+        initAuth().then(() => {
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    window.frogApp.user = user;
+                    // Trigger the app initialization in the main script block
+                    if (window.onAppReady) window.onAppReady(user);
+                }
+            });
+        });
     </script>
 
     <script>
@@ -105,7 +151,7 @@
     <nav class="fixed top-0 w-full z-50 px-4 md:px-6 py-4 md:py-6">
         <div class="max-w-7xl mx-auto flex justify-between items-center glass rounded-2xl md:rounded-3xl px-4 md:px-6 py-3 md:py-4 border border-zinc-100 shadow-sm">
             <div class="flex items-center gap-2 md:gap-3">
-                <svg viewBox="0 0 100 100" class="w-6 h-6 md:w-8 h-8 fill-frog">
+                <svg viewBox="0 0 100 100" class="w-6 h-6 md:w-8 md:h-8 fill-frog">
                     <circle cx="30" cy="40" r="12" /><circle cx="70" cy="40" r="12" />
                     <path d="M10 50 Q50 90 90 50 L80 40 L20 40 Z" />
                 </svg>
@@ -129,6 +175,15 @@
                     <a href="#habitat" class="bg-zinc-900 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg md:rounded-xl text-[10px] md:text-sm font-bold hover:bg-frog transition-all">
                         Find Us
                     </a>
+                    
+                    <!-- ADMIN ONLY PANEL BUTTON -->
+                    <button id="adminPanelBtn" onclick="openAdminStats()" class="hidden relative w-7 h-7 md:w-9 md:h-9 bg-zinc-900 text-white rounded-lg md:rounded-xl flex items-center justify-center border border-zinc-800 shadow-sm hover:bg-frog hover:border-frog transition-colors" title="Admin Intel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 md:w-5 md:h-5">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                    </button>
+
                     <button id="profileBtn" onclick="handleProfileClick()" class="relative w-7 h-7 md:w-9 md:h-9 bg-white rounded-lg md:rounded-xl flex items-center justify-center border border-zinc-200 shadow-sm overflow-hidden">
                         <svg viewBox="0 0 24 24" class="w-4 h-4 md:w-5 md:h-5 fill-current" xmlns="http://www.w3.org/2000/svg">
                             <path d="M12 2C9.5 2 7.5 4 7.5 6.5C7.5 7.8 8.1 9 9 9.8C6.1 11.1 4 13.8 4 17C4 19.8 6.2 22 9 22H15C17.8 22 20 19.8 20 17C20 13.8 17.9 11.1 15 9.8C15.9 9 16.5 7.8 16.5 6.5C16.5 4 14.5 2 12 2Z" fill-opacity="0.2"/>
@@ -145,25 +200,31 @@
     <div class="fixed bottom-6 right-6 z-[60] flex flex-col items-end gap-4">
         <!-- Chat Window -->
         <div id="supportWindow" class="hidden scale-90 opacity-0 origin-bottom-right transition-all duration-300 bg-white w-[320px] rounded-[2rem] shadow-2xl border border-zinc-100 overflow-hidden mb-2">
-            <div class="bg-frog p-6 text-white">
+            <div class="bg-frog p-4 text-white shadow-md relative z-10">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                    <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
                         <svg viewBox="0 0 100 100" class="w-6 h-6 fill-white">
                             <circle cx="30" cy="40" r="12" /><circle cx="70" cy="40" r="12" />
                             <path d="M10 50 Q50 90 90 50 L80 40 L20 40 Z" />
                         </svg>
                     </div>
                     <div>
-                        <h4 class="font-bold leading-none">Support Pond</h4>
-                        <span class="text-[10px] opacity-80 uppercase tracking-widest font-black">Online Now</span>
+                        <h4 class="font-bold leading-none text-lg">Lilypad Chat</h4>
+                        <span class="text-[9px] opacity-90 uppercase tracking-widest font-black">Live Pond Updates</span>
                     </div>
                 </div>
             </div>
-            <div class="p-6 space-y-4">
-                <p class="text-xs text-zinc-500 font-medium leading-relaxed italic">"Something not inflatable enough? Send us a croak!"</p>
-                <div class="space-y-3">
-                    <textarea placeholder="Your message..." class="w-full h-24 p-4 bg-zinc-50 border border-zinc-100 rounded-2xl text-sm resize-none"></textarea>
-                    <button class="w-full py-3 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-frog transition-colors">Send Croak</button>
+            
+            <!-- Messages Area -->
+            <div id="chatMessages" class="h-64 overflow-y-auto p-4 bg-zinc-50 flex flex-col gap-3">
+                <div class="text-center text-xs text-zinc-400 italic my-auto">Connecting to the pond...</div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="p-4 bg-white border-t border-zinc-100">
+                <div class="flex flex-col gap-2">
+                    <textarea id="chatInput" placeholder="Send a croak..." class="w-full h-12 p-3 bg-zinc-50 border border-zinc-100 rounded-xl text-sm resize-none focus:bg-white transition-colors" onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); window.sendChatMessage(); }"></textarea>
+                    <button onclick="window.sendChatMessage()" class="w-full py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-frog transition-colors shadow-sm">Send Croak</button>
                 </div>
             </div>
         </div>
@@ -187,7 +248,48 @@
         </button>
     </div>
 
-    <!-- Modals (Verify, Auth, Profile) -->
+    <!-- Modals (Admin Stats, Verify, Alerts, Auth, Profile) -->
+    <div id="adminStatsModal" class="fixed inset-0 z-[130] modal-overlay items-center justify-center p-4 md:p-6" onclick="closeOnOverlay(event, 'adminStatsModal')">
+        <div class="bg-white rounded-[2rem] w-full max-w-sm p-8 shadow-2xl text-center relative overflow-hidden">
+            <div class="w-16 h-16 bg-zinc-100 rounded-2xl flex items-center justify-center mx-auto mb-6 text-zinc-900">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-8 h-8">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            </div>
+            <h3 class="text-2xl font-extrabold mb-2 text-zinc-900">Pond Intel</h3>
+            <p class="text-zinc-500 mb-6 text-sm font-medium leading-relaxed">Total registered Froggy accounts in the pond.</p>
+            <div class="text-6xl font-black text-frog mb-8" id="visitorCountDisplay">--</div>
+            <button onclick="toggleModal('adminStatsModal')" class="w-full py-4 bg-zinc-900 text-white rounded-2xl font-bold shadow-lg hover:scale-[1.02] transition-transform">Close Intel</button>
+        </div>
+    </div>
+
+    <div id="welcomeAlertModal" class="fixed inset-0 z-[110] modal-overlay items-center justify-center p-4 md:p-6" onclick="closeOnOverlay(event, 'welcomeAlertModal')">
+        <div class="bg-white rounded-[2rem] w-full max-w-sm p-8 shadow-2xl text-center relative overflow-hidden">
+            <div class="w-16 h-16 bg-frog/10 rounded-2xl flex items-center justify-center mx-auto mb-6 text-frog">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-8 h-8">
+                    <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
+                </svg>
+            </div>
+            <h3 class="text-2xl font-extrabold mb-2 text-zinc-900">Welcome to the Pond!</h3>
+            <p class="text-zinc-500 mb-8 text-sm font-medium leading-relaxed">You've successfully hopped in. You'll only ever see this alert once in a lifetime, so enjoy the magic and start croaking!</p>
+            <button onclick="toggleModal('welcomeAlertModal')" class="w-full py-4 bg-frog text-white rounded-2xl font-bold shadow-lg shadow-frog/20 hover:scale-[1.02] transition-transform">Awesome!</button>
+        </div>
+    </div>
+
+    <div id="pondCrewAlertModal" class="fixed inset-0 z-[120] modal-overlay items-center justify-center p-4 md:p-6" onclick="closeOnOverlay(event, 'pondCrewAlertModal')">
+        <div class="bg-white rounded-[2rem] w-full max-w-sm p-8 shadow-2xl text-center relative overflow-hidden">
+            <div class="w-16 h-16 bg-blue-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6 text-blue-500">
+                <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" class="w-8 h-8">
+                    <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+                </svg>
+            </div>
+            <h3 class="text-2xl font-extrabold mb-2 text-zinc-900">Pond Crew Official!</h3>
+            <p class="text-zinc-500 mb-8 text-sm font-medium leading-relaxed">You've officially been Crewed! This is a one-time alert to let you know you have the exclusive Pond Crew badge. Wear it with pride!</p>
+            <button onclick="toggleModal('pondCrewAlertModal')" class="w-full py-4 bg-blue-500 text-white rounded-2xl font-bold shadow-lg shadow-blue-500/20 hover:scale-[1.02] transition-transform">Ribbit Yeah!</button>
+        </div>
+    </div>
+
     <div id="verifyModal" class="fixed inset-0 z-[100] modal-overlay items-center justify-center p-4 md:p-6" onclick="closeOnOverlay(event, 'verifyModal')">
         <div class="bg-white rounded-[2rem] w-full max-w-sm p-8 shadow-2xl text-center relative overflow-hidden">
             <div class="w-16 h-16 bg-frog/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
@@ -204,8 +306,8 @@
             <h3 id="authTitle" class="text-2xl md:text-3xl font-extrabold tracking-tight mb-2">Join the Pond</h3>
             <p class="text-zinc-400 text-sm mb-6 md:mb-8 italic font-semibold">"High fives only inside."</p>
             <div class="space-y-3 md:space-y-4">
-                <input type="email" id="authEmail" placeholder="Froggy Email" class="w-full px-5 md:px-6 py-3.5 md:py-4 bg-zinc-50 border border-zinc-100 rounded-xl md:rounded-2xl font-medium">
-                <input type="password" id="authPass" placeholder="Secret Croak" class="w-full px-5 md:px-6 py-3.5 md:py-4 bg-zinc-50 border border-zinc-100 rounded-xl md:rounded-2xl font-medium">
+                <input type="email" id="authEmail" placeholder="Froggy Email" class="w-full px-5 md:px-6 py-3.5 md:py-4 bg-zinc-50 border border-zinc-100 rounded-xl md:rounded-2xl font-medium focus:border-frog transition-colors">
+                <input type="password" id="authPass" placeholder="Secret Croak" class="w-full px-5 md:px-6 py-3.5 md:py-4 bg-zinc-50 border border-zinc-100 rounded-xl md:rounded-2xl font-medium focus:border-frog transition-colors">
                 <button id="mainAuthBtn" onclick="performAuth()" class="w-full py-4 md:py-5 bg-frog text-white rounded-xl md:rounded-2xl font-bold text-base md:text-lg shadow-lg shadow-frog/20">Log In</button>
                 <button onclick="toggleAuthMode()" id="switchAuthBtn" class="w-full py-2 text-zinc-400 text-[10px] font-black uppercase tracking-widest">Or Create Account</button>
             </div>
@@ -238,10 +340,10 @@
                     </div>
                     <div class="p-3 bg-zinc-50 rounded-xl border border-zinc-100">
                         <div class="text-[8px] font-black text-zinc-400 uppercase">Pond Rank</div>
-                        <div class="font-extrabold text-sm md:text-base text-frog">Elder</div>
+                        <div id="userRank" class="font-extrabold text-sm md:text-base text-frog flex items-center">Tadpole</div>
                     </div>
                 </div>
-                <button onclick="window.frogAuth.logout(); toggleModal('profileModal')" class="w-full py-3.5 bg-zinc-100 text-zinc-500 rounded-xl font-bold text-[10px] uppercase tracking-widest">Logout</button>
+                <button onclick="performLogout()" class="w-full py-3.5 bg-zinc-100 text-zinc-500 rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-zinc-200 transition-colors">Leave Pond</button>
             </div>
         </div>
     </div>
@@ -346,21 +448,40 @@
         </div>
     </section>
 
-    <footer class="py-12 px-6 text-center border-t border-zinc-100 bg-white">
+    <footer class="py-12 px-6 flex flex-col items-center border-t border-zinc-100 bg-white gap-8">
+        <div class="flex flex-col items-center gap-4">
+            <span class="text-[10px] md:text-xs font-black text-zinc-400 uppercase tracking-widest">You can find us on:</span>
+            <div class="flex items-center gap-3">
+                <a href="https://tiktok.com/@specklefrogs2" target="_blank" rel="noopener noreferrer" class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-50 border border-zinc-100 text-zinc-600 hover:text-frog hover:border-frog/30 hover:bg-frog/5 transition-all group shadow-sm">
+                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" class="w-4 h-4 group-hover:scale-110 transition-transform">
+                        <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
+                    </svg>
+                </a>
+                <a href="https://instagram.com/speclefrogs2" target="_blank" rel="noopener noreferrer" class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-50 border border-zinc-100 text-zinc-600 hover:text-frog hover:border-frog/30 hover:bg-frog/5 transition-all group shadow-sm">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 group-hover:scale-110 transition-transform">
+                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                        <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                    </svg>
+                </a>
+            </div>
+        </div>
         <div class="text-[9px] md:text-[10px] font-black text-zinc-400 uppercase tracking-widest">
             &copy; 2026 Speckle Frogs | London, UK
         </div>
     </footer>
 
     <script>
+        // Main App Logic Script
         let isLoginMode = true;
-        let currentUser = null;
 
         function toggleModal(id) {
             const modal = document.getElementById(id);
-            const isActive = modal.classList.contains('active');
             modal.classList.toggle('active');
-            document.body.style.overflow = isActive ? 'auto' : 'hidden';
+            
+            // Smart check to ensure scrolling is disabled if ANY modal is still open
+            const anyActive = document.querySelectorAll('.modal-overlay.active').length > 0;
+            document.body.style.overflow = anyActive ? 'hidden' : 'auto';
         }
 
         function closeOnOverlay(e, id) {
@@ -368,10 +489,46 @@
         }
 
         function handleProfileClick() {
-            if (currentUser) {
+            if (window.frogApp && window.frogApp.profileName !== 'Guest Frog') {
                 toggleModal('profileModal');
             } else {
                 toggleModal('authModal');
+            }
+        }
+
+        function openAdminStats() {
+            toggleModal('adminStatsModal');
+            document.getElementById('visitorCountDisplay').innerText = '...';
+            
+            if (window.frogApp && window.frogApp.db) {
+                const { db, appId, collection, onSnapshot } = window.frogApp;
+                const accountsRef = collection(db, 'artifacts', appId, 'public', 'data', 'accounts');
+                
+                // Uses onSnapshot to securely and easily count the documents in the collection
+                onSnapshot(accountsRef, (snapshot) => {
+                    document.getElementById('visitorCountDisplay').innerText = snapshot.size;
+                }, (error) => {
+                    console.error("Admin stat error:", error);
+                    document.getElementById('visitorCountDisplay').innerText = 'Err';
+                });
+            }
+        }
+
+        async function recordAccount(email, profileName) {
+            if (!email || email === 'smithpearson79@gmail.com' || !window.frogApp) return;
+            try {
+                const { db, appId, doc, setDoc } = window.frogApp;
+                // Make a safe document ID from the email
+                const safeId = email.replace(/[^a-zA-Z0-9]/g, '_');
+                const accountRef = doc(db, 'artifacts', appId, 'public', 'data', 'accounts', safeId);
+                // merge:true ensures we don't accidentally wipe data if they already exist
+                await setDoc(accountRef, { 
+                    email: email,
+                    name: profileName,
+                    lastSeen: Date.now() 
+                }, { merge: true });
+            } catch (err) {
+                console.error("Error recording account:", err);
             }
         }
 
@@ -399,59 +556,234 @@
             document.getElementById('switchAuthBtn').innerText = isLoginMode ? 'Or Create Account' : 'Back to Login';
         }
 
-        async function performAuth() {
-            const email = document.getElementById('authEmail').value;
-            const pass = document.getElementById('authPass').value;
-            const err = document.getElementById('authError');
-            const btn = document.getElementById('mainAuthBtn');
-            
-            if(!email || !pass) return;
+        function escapeHtml(unsafe) {
+            return (unsafe || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
 
-            err.classList.add('hidden');
-            btn.disabled = true;
-            btn.innerText = 'Ribbiting...';
+        window.sendChatMessage = async () => {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if (!text || !window.frogApp || !window.frogApp.user) return;
+
+            input.value = '';
 
             try {
-                if (isLoginMode) {
-                    await window.frogAuth.login(email, pass);
-                } else {
-                    await window.frogAuth.signup(email, pass);
+                const { db, appId, collection, addDoc } = window.frogApp;
+                const messagesRef = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
+                
+                await addDoc(messagesRef, {
+                    text: text,
+                    uid: window.frogApp.user.uid,
+                    name: window.frogApp.profileName,
+                    isVerified: !!window.frogApp.isVerifiedDuo,
+                    isPondCrew: !!window.frogApp.isPondCrew,
+                    timestamp: Date.now()
+                });
+            } catch (error) {
+                console.error("Error sending message:", error);
+            }
+        };
+
+        let unsubscribeChat = null;
+
+        function initChatListener() {
+            if (!window.frogApp || !window.frogApp.user) return;
+            
+            const { db, appId, collection, onSnapshot } = window.frogApp;
+            const messagesRef = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
+
+            if (unsubscribeChat) unsubscribeChat();
+
+            unsubscribeChat = onSnapshot(messagesRef, (snapshot) => {
+                const messages = [];
+                snapshot.forEach(doc => messages.push({ id: doc.id, ...doc.data() }));
+                
+                // Sort by timestamp in memory to avoid complex query indexing issues
+                messages.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+                renderMessages(messages, window.frogApp.user);
+            }, (error) => {
+                console.error("Chat error:", error);
+            });
+        }
+
+        function renderMessages(messages, user) {
+            const chatBox = document.getElementById('chatMessages');
+            
+            if (messages.length === 0) {
+                chatBox.innerHTML = '<div class="text-center text-xs text-zinc-400 italic my-auto">The pond is quiet. Be the first to croak!</div>';
+                return;
+            }
+
+            chatBox.innerHTML = messages.map(msg => {
+                const isMe = msg.uid === user.uid;
+                const displayName = msg.name || 'Frog';
+                
+                let userBadges = '';
+                if (msg.isVerified) {
+                    userBadges += `<span class="relative w-3.5 h-3.5 ml-1 flex items-center justify-center shrink-0" title="Verified Duo"><span class="absolute inset-0 bg-frog/20 rounded-full scale-110"></span><svg viewBox="0 0 100 100" class="absolute inset-0 w-full h-full badge-spin fill-frog/20"><path d="M50 5 L55 35 L85 30 L65 50 L85 70 L55 65 L50 95 L45 65 L15 70 L35 50 L15 30 L45 35 Z"></path></svg><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="w-2 h-2 text-frog relative z-10"><polyline points="20 6 9 17 4 12"></polyline></svg></span>`;
                 }
-                toggleModal('authModal');
-            } catch (e) {
-                err.innerText = e.message.replace('Firebase: ', '');
+                if (msg.isPondCrew) {
+                    userBadges += `<span class="relative w-3.5 h-3.5 ml-1 flex items-center justify-center shrink-0 text-blue-500 drop-shadow-sm" title="Pond Crew"><span class="absolute inset-0 bg-blue-500/20 rounded-full scale-110"></span><svg viewBox="0 0 100 100" class="absolute inset-0 w-full h-full badge-spin fill-blue-500/20"><path d="M50 5 L55 35 L85 30 L65 50 L85 70 L55 65 L50 95 L45 65 L15 70 L35 50 L15 30 L45 35 Z"></path></svg><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" class="w-2.5 h-2.5 relative z-10"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg></span>`;
+                }
+
+                return `
+                    <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'}">
+                        <span class="text-[9px] font-extrabold text-zinc-400 mb-0.5 px-1 uppercase tracking-wider flex items-center">${escapeHtml(displayName)}${userBadges}</span>
+                        <div class="px-3.5 py-2 max-w-[85%] text-sm leading-relaxed shadow-sm ${isMe ? 'bg-frog text-white rounded-[1.25rem] rounded-br-sm' : 'bg-white border border-zinc-100 text-zinc-800 rounded-[1.25rem] rounded-bl-sm'}">
+                            ${escapeHtml(msg.text)}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // Simulates logging in by tracking a display name locally, bypassing custom token conflicts
+        function performAuth() {
+            const emailInput = document.getElementById('authEmail').value.trim();
+            const passInput = document.getElementById('authPass').value.trim();
+            const err = document.getElementById('authError');
+            
+            if (!emailInput || !passInput) {
+                err.innerText = "Please enter both email and password.";
                 err.classList.remove('hidden');
-            } finally {
-                btn.disabled = false;
-                btn.innerText = isLoginMode ? 'Log In' : 'Sign Up';
+                return;
+            }
+
+            err.classList.add('hidden');
+            
+            const lowerEmail = emailInput.toLowerCase();
+            
+            // Apply badges!
+            window.frogApp.isVerifiedDuo = (lowerEmail === 'smithpearson79@gmail.com');
+            window.frogApp.isPondCrew = (lowerEmail === 'artistlnf441@gmail.com' || lowerEmail === 'smithpearson79@gmail.com');
+            
+            // Extract the part before the @ to use as their chat name
+            const username = emailInput.split('@')[0];
+            window.frogApp.profileName = username;
+            
+            // Save to local storage so they stay logged in across refreshes
+            localStorage.setItem('frogProfile', username);
+            localStorage.setItem('frogEmail', lowerEmail);
+            
+            document.getElementById('userDisplay').innerText = window.frogApp.profileName;
+            
+            const spinningBadgeHTML = `<span class="relative w-4 h-4 ml-1.5 flex items-center justify-center shrink-0" title="Verified Duo"><span class="absolute inset-0 bg-frog/20 rounded-full scale-110"></span><svg viewBox="0 0 100 100" class="absolute inset-0 w-full h-full badge-spin fill-frog/20"><path d="M50 5 L55 35 L85 30 L65 50 L85 70 L55 65 L50 95 L45 65 L15 70 L35 50 L15 30 L45 35 Z"></path></svg><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="w-2.5 h-2.5 text-frog relative z-10"><polyline points="20 6 9 17 4 12"></polyline></svg></span>`;
+            const pondCrewBadgeHTML = `<span class="relative w-4 h-4 ml-1.5 flex items-center justify-center shrink-0 text-blue-500 drop-shadow-sm" title="Pond Crew"><span class="absolute inset-0 bg-blue-500/20 rounded-full scale-110"></span><svg viewBox="0 0 100 100" class="absolute inset-0 w-full h-full badge-spin fill-blue-500/20"><path d="M50 5 L55 35 L85 30 L65 50 L85 70 L55 65 L50 95 L45 65 L15 70 L35 50 L15 30 L45 35 Z"></path></svg><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" class="w-2.5 h-2.5 relative z-10"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg></span>`;
+
+            if (window.frogApp.isVerifiedDuo && window.frogApp.isPondCrew) {
+                document.getElementById('userRank').innerHTML = `Verified Duo & Crew ${spinningBadgeHTML}${pondCrewBadgeHTML}`;
+            } else if (window.frogApp.isVerifiedDuo) {
+                document.getElementById('userRank').innerHTML = `Verified Duo ${spinningBadgeHTML}`;
+            } else if (window.frogApp.isPondCrew) {
+                document.getElementById('userRank').innerHTML = `Pond Crew ${pondCrewBadgeHTML}`;
+            } else {
+                document.getElementById('userRank').innerHTML = 'Froggy Friend';
+            }
+            
+            // Visual indicators of setup
+            document.getElementById('authDot').classList.replace('bg-zinc-300', 'bg-frog');
+
+            // Manage Admin Eye Button Visibility
+            if (lowerEmail === 'smithpearson79@gmail.com') {
+                document.getElementById('adminPanelBtn').classList.remove('hidden');
+            } else {
+                document.getElementById('adminPanelBtn').classList.add('hidden');
+                // Ensure the account is logged for non-admins
+                recordAccount(lowerEmail, username);
+            }
+            
+            toggleModal('authModal');
+
+            // Trigger the one-time welcome alert
+            if (!localStorage.getItem('welcomed_' + username)) {
+                localStorage.setItem('welcomed_' + username, 'true');
+                setTimeout(() => toggleModal('welcomeAlertModal'), 400);
+            }
+            
+            // Trigger the one-time Pond Crew alert
+            if (window.frogApp.isPondCrew && !localStorage.getItem('crew_welcomed_' + username)) {
+                localStorage.setItem('crew_welcomed_' + username, 'true');
+                setTimeout(() => toggleModal('pondCrewAlertModal'), 500);
             }
         }
 
-        window.onload = () => {
-            const checkAuthInterval = setInterval(() => {
-                if (window.frogAuth && window.frogAuth.auth) {
-                    clearInterval(checkAuthInterval);
-                    const auth = window.frogAuth.auth;
-                    import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js").then(mod => {
-                        mod.onAuthStateChanged(auth, (user) => {
-                            currentUser = user;
-                            const dot = document.getElementById('authDot');
-                            const userDisplay = document.getElementById('userDisplay');
-                            const userUid = document.getElementById('userUid');
+        function performLogout() {
+            // Clear local storage so they stay logged out!
+            localStorage.removeItem('frogProfile');
+            localStorage.removeItem('frogEmail');
+            
+            window.frogApp.profileName = 'Guest Frog';
+            window.frogApp.isVerifiedDuo = false;
+            window.frogApp.isPondCrew = false;
+            document.getElementById('userDisplay').innerText = 'Guest Frog';
+            document.getElementById('userRank').innerText = 'Tadpole';
+            document.getElementById('authDot').classList.replace('bg-frog', 'bg-zinc-300');
+            document.getElementById('authEmail').value = '';
+            document.getElementById('authPass').value = '';
+            
+            // Remove Admin Panel button just in case
+            document.getElementById('adminPanelBtn').classList.add('hidden');
+            
+            toggleModal('profileModal');
+        }
 
-                            if (user) {
-                                dot.classList.replace('bg-zinc-300', 'bg-frog');
-                                userDisplay.innerText = user.email.split('@')[0];
-                                userUid.innerText = user.uid;
-                            } else {
-                                dot.classList.replace('bg-frog', 'bg-zinc-300');
-                                userDisplay.innerText = 'Guest Frog';
-                                userUid.innerText = '';
-                            }
-                        });
-                    });
+        // Executed by the module script once the strict Firebase auth flow fully finishes
+        window.onAppReady = (user) => {
+            // Check if they were previously logged in
+            const savedEmail = localStorage.getItem('frogEmail');
+            const savedProfile = localStorage.getItem('frogProfile');
+
+            if (savedEmail && savedProfile) {
+                window.frogApp.profileName = savedProfile;
+                window.frogApp.isVerifiedDuo = (savedEmail === 'smithpearson79@gmail.com');
+                window.frogApp.isPondCrew = (savedEmail === 'artistlnf441@gmail.com' || savedEmail === 'smithpearson79@gmail.com');
+                
+                document.getElementById('authDot').classList.replace('bg-zinc-300', 'bg-frog');
+                
+                const spinningBadgeHTML = `<span class="relative w-4 h-4 ml-1.5 flex items-center justify-center shrink-0" title="Verified Duo"><span class="absolute inset-0 bg-frog/20 rounded-full scale-110"></span><svg viewBox="0 0 100 100" class="absolute inset-0 w-full h-full badge-spin fill-frog/20"><path d="M50 5 L55 35 L85 30 L65 50 L85 70 L55 65 L50 95 L45 65 L15 70 L35 50 L15 30 L45 35 Z"></path></svg><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="w-2.5 h-2.5 text-frog relative z-10"><polyline points="20 6 9 17 4 12"></polyline></svg></span>`;
+                const pondCrewBadgeHTML = `<span class="relative w-4 h-4 ml-1.5 flex items-center justify-center shrink-0 text-blue-500 drop-shadow-sm" title="Pond Crew"><span class="absolute inset-0 bg-blue-500/20 rounded-full scale-110"></span><svg viewBox="0 0 100 100" class="absolute inset-0 w-full h-full badge-spin fill-blue-500/20"><path d="M50 5 L55 35 L85 30 L65 50 L85 70 L55 65 L50 95 L45 65 L15 70 L35 50 L15 30 L45 35 Z"></path></svg><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" class="w-2.5 h-2.5 relative z-10"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg></span>`;
+
+                if (window.frogApp.isVerifiedDuo && window.frogApp.isPondCrew) {
+                    document.getElementById('userRank').innerHTML = `Verified Duo & Crew ${spinningBadgeHTML}${pondCrewBadgeHTML}`;
+                } else if (window.frogApp.isVerifiedDuo) {
+                    document.getElementById('userRank').innerHTML = `Verified Duo ${spinningBadgeHTML}`;
+                } else if (window.frogApp.isPondCrew) {
+                    document.getElementById('userRank').innerHTML = `Pond Crew ${pondCrewBadgeHTML}`;
+                } else {
+                    document.getElementById('userRank').innerHTML = 'Froggy Friend';
                 }
-            }, 100);
+                
+                // Show Admin Panel Button for Smith Pearson automatically
+                if (savedEmail === 'smithpearson79@gmail.com') {
+                    document.getElementById('adminPanelBtn').classList.remove('hidden');
+                } else {
+                    // Automatically log this account since it's not the admin
+                    recordAccount(savedEmail, savedProfile);
+                }
+
+                // Trigger the one-time welcome alert if they auto-logged in and haven't seen it
+                if (!localStorage.getItem('welcomed_' + savedProfile)) {
+                    localStorage.setItem('welcomed_' + savedProfile, 'true');
+                    setTimeout(() => toggleModal('welcomeAlertModal'), 800);
+                }
+
+                // Trigger the one-time Pond Crew alert if they auto-logged in and haven't seen it
+                if (window.frogApp.isPondCrew && !localStorage.getItem('crew_welcomed_' + savedProfile)) {
+                    localStorage.setItem('crew_welcomed_' + savedProfile, 'true');
+                    setTimeout(() => toggleModal('pondCrewAlertModal'), 900);
+                }
+            } else {
+                // If they are literally just a brand new guest, we do not count them as an account yet.
+            }
+
+            document.getElementById('userDisplay').innerText = window.frogApp.profileName;
+            document.getElementById('userUid').innerText = user.uid;
+            
+            // Start listening to live chat updates safely
+            initChatListener();
         };
     </script>
 </body>
