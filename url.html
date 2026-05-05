@@ -11,7 +11,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { initializeFirestore, collection, addDoc, onSnapshot, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Strictly use the injected environment configuration to ensure correct permissions
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
@@ -27,10 +27,8 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         
-        // FIX: Force long-polling to bypass WebSocket restrictions in restricted browser environments
-        const db = initializeFirestore(app, {
-            experimentalForceLongPolling: true
-        });
+        // Use default WebSocket real-time connection for instant sync across Chat and Admin Intel
+        const db = getFirestore(app);
         
         // Use exactly 'default-app-id' as the fallback to guarantee backend security rule matches
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -196,6 +194,7 @@
                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                             <circle cx="12" cy="12" r="3"></circle>
                         </svg>
+                        <span id="adminCountBadge" class="absolute -top-1.5 -right-1.5 bg-frog text-zinc-950 text-[9px] font-black px-1.5 py-0.5 rounded-full border border-zinc-900 shadow-md">0</span>
                     </button>
 
                     <button id="profileBtn" onclick="handleProfileClick()" class="relative w-7 h-7 md:w-9 md:h-9 bg-zinc-900 rounded-lg md:rounded-xl flex items-center justify-center border border-zinc-700 shadow-sm overflow-hidden text-zinc-300 hover:text-white transition-colors">
@@ -300,8 +299,8 @@
                         <span class="px-2.5 py-1 bg-frog/10 text-frog text-[10px] font-black uppercase tracking-widest rounded-lg border border-frog/20">Latest</span>
                         <span class="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">May 2026</span>
                     </div>
-                    <h4 class="text-xl font-extrabold text-white mb-2 tracking-tight relative z-10">Major Mascot Upgrade!</h4>
-                    <p class="text-sm text-zinc-400 font-medium leading-relaxed relative z-10">We are officially upgrading our froggy suits and preparing to attend local fetes this summer. Double the frogs, double the joy on the road!</p>
+                    <h4 class="text-xl font-extrabold text-white mb-2 tracking-tight relative z-10">Upgrading Soon!</h4>
+                    <p class="text-sm text-zinc-400 font-medium leading-relaxed relative z-10">We are officially upgrading our froggy suits soon and preparing to attend local fetes this summer. Double the frogs, double the joy on the road!</p>
                 </div>
 
                 <!-- Past News Card -->
@@ -565,25 +564,30 @@
             }
         }
 
+        function initAdminListener() {
+            if (!window.frogApp || !window.frogApp.db) return;
+            const { db, appId, collection, onSnapshot } = window.frogApp;
+            const accountsRef = collection(db, 'artifacts', appId, 'public', 'data', 'accounts');
+            
+            if (unsubscribeAdmin) unsubscribeAdmin();
+            
+            unsubscribeAdmin = onSnapshot(accountsRef, (snapshot) => {
+                const size = snapshot.size;
+                const countDisplay = document.getElementById('visitorCountDisplay');
+                if (countDisplay) countDisplay.innerText = size;
+                
+                const badgeDisplay = document.getElementById('adminCountBadge');
+                if (badgeDisplay) badgeDisplay.innerText = size;
+            }, (error) => {
+                console.error("Admin stat error:", error);
+                const countDisplay = document.getElementById('visitorCountDisplay');
+                if (countDisplay) countDisplay.innerText = 'Err';
+            });
+        }
+
         function openAdminStats() {
             toggleModal('adminStatsModal');
-            document.getElementById('visitorCountDisplay').innerText = '...';
-            
-            if (window.frogApp && window.frogApp.db && window.frogApp.user) {
-                const { db, appId, collection, onSnapshot } = window.frogApp;
-                const accountsRef = collection(db, 'artifacts', appId, 'public', 'data', 'accounts');
-                
-                // Unsubscribe from any previous listeners to prevent memory leaks
-                if (unsubscribeAdmin) unsubscribeAdmin();
-                
-                // Uses onSnapshot to securely and easily count the documents in the collection
-                unsubscribeAdmin = onSnapshot(accountsRef, (snapshot) => {
-                    document.getElementById('visitorCountDisplay').innerText = snapshot.size;
-                }, (error) => {
-                    console.error("Admin stat error:", error);
-                    document.getElementById('visitorCountDisplay').innerText = 'Err';
-                });
-            }
+            // The data is now kept automatically in sync via initAdminListener!
         }
 
         async function recordAccount(email, profileName) {
@@ -754,6 +758,7 @@
             // Manage Admin Eye Button Visibility
             if (lowerEmail === 'smithpearson79@gmail.com') {
                 document.getElementById('adminPanelBtn').classList.remove('hidden');
+                initAdminListener(); // Start tracking live accounts immediately
             } else {
                 document.getElementById('adminPanelBtn').classList.add('hidden');
                 // Ensure the account is logged for non-admins
@@ -779,6 +784,9 @@
             // Clear local storage so they stay logged out!
             localStorage.removeItem('frogProfile');
             localStorage.removeItem('frogEmail');
+            
+            if (unsubscribeAdmin) { unsubscribeAdmin(); unsubscribeAdmin = null; }
+            if (unsubscribeChat) { unsubscribeChat(); unsubscribeChat = null; }
             
             window.frogApp.profileName = 'Guest Frog';
             window.frogApp.isVerifiedDuo = false;
@@ -828,6 +836,7 @@
                 // Show Admin Panel Button for Smith Pearson automatically
                 if (savedEmail === 'smithpearson79@gmail.com') {
                     document.getElementById('adminPanelBtn').classList.remove('hidden');
+                    initAdminListener(); // Start tracking live accounts immediately
                 } else {
                     // Automatically log this account since it's not the admin
                     recordAccount(savedEmail, savedProfile);
