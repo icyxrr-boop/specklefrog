@@ -152,6 +152,23 @@
             background: #3f3f46; /* zinc-700 */
         }
 
+        /* Sleeping Frog Animation for Offline Service */
+        @keyframes zzz-float {
+            0% { opacity: 0; transform: translate(0, 0) scale(0.5); }
+            20% { opacity: 1; }
+            80% { opacity: 1; }
+            100% { opacity: 0; transform: translate(15px, -30px) scale(1.2); }
+        }
+        .zzz-1 { animation: zzz-float 2.5s infinite linear 0s; }
+        .zzz-2 { animation: zzz-float 2.5s infinite linear 0.8s; }
+        .zzz-3 { animation: zzz-float 2.5s infinite linear 1.6s; }
+
+        @keyframes frog-snore {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        .frog-snore-anim { animation: frog-snore 2.5s infinite ease-in-out; }
+
         html { scroll-behavior: smooth; }
         input:focus, textarea:focus { outline: none; border-color: #10b981; }
     </style>
@@ -234,14 +251,34 @@
             
             <!-- Messages Area -->
             <div id="chatMessages" class="h-[50vh] sm:h-72 overflow-y-auto p-4 bg-zinc-950 flex flex-col gap-3 clean-scrollbar">
-                <div class="text-center text-xs text-zinc-500 italic my-auto">Connecting to FrogService...</div>
+                <div class="flex-1 flex flex-col items-center justify-center h-full text-center p-4">
+                    <div class="relative w-24 h-24 mb-6">
+                        <!-- Glowing Offline Ring -->
+                        <div class="absolute inset-0 bg-red-500/20 rounded-full animate-ping"></div>
+                        <div class="relative flex items-center justify-center w-full h-full bg-zinc-900 border-2 border-red-500/50 rounded-full text-red-500/80 frog-snore-anim shadow-[0_0_15px_rgba(239,68,68,0.2)]">
+                            <!-- Sleeping Frog Icon -->
+                            <svg viewBox="0 0 100 100" class="w-12 h-12 fill-zinc-800">
+                                <path d="M 5 70 C 5 95 95 95 95 70 C 95 45 60 50 50 65 C 40 50 5 45 5 70 Z" />
+                                <!-- Closed eyes -->
+                                <path d="M 25 55 Q 30 60 35 55" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                                <path d="M 65 55 Q 70 60 75 55" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                            </svg>
+                            <!-- Floating Zzz's -->
+                            <span class="absolute top-2 right-2 text-red-500 text-sm font-black zzz-1">Z</span>
+                            <span class="absolute -top-2 -right-2 text-red-500 text-lg font-black zzz-2">z</span>
+                            <span class="absolute -top-6 -right-6 text-red-500 text-2xl font-black zzz-3">z</span>
+                        </div>
+                    </div>
+                    <h4 class="text-white font-extrabold text-xl mb-2 tracking-tight">Service is Down</h4>
+                    <p class="text-sm text-zinc-400 font-medium leading-relaxed">Sorry, the FrogService is currently asleep.<br>Check back later for more joy!</p>
+                </div>
             </div>
 
             <!-- Input Area -->
             <div class="p-4 bg-zinc-900 border-t border-zinc-800">
                 <div class="flex flex-col gap-2">
-                    <textarea id="chatInput" placeholder="How can we help you today?" class="w-full h-12 p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm resize-none focus:bg-zinc-800 focus:border-frog text-white transition-colors placeholder-zinc-600" onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); window.sendChatMessage(); }"></textarea>
-                    <button onclick="window.sendChatMessage()" class="w-full py-2.5 bg-white text-zinc-950 rounded-xl text-sm font-bold hover:bg-frog hover:text-white transition-colors shadow-sm">Send Message</button>
+                    <textarea id="chatInput" disabled placeholder="Service currently offline..." class="w-full h-12 p-3 bg-zinc-950/50 border border-zinc-800/50 rounded-xl text-sm resize-none text-zinc-500 cursor-not-allowed transition-colors placeholder-zinc-700"></textarea>
+                    <button disabled class="w-full py-2.5 bg-zinc-800 text-zinc-600 rounded-xl text-sm font-bold cursor-not-allowed shadow-none">Offline</button>
                 </div>
             </div>
         </div>
@@ -651,49 +688,13 @@
         }
 
         window.sendChatMessage = async () => {
-            const input = document.getElementById('chatInput');
-            const text = input.value.trim();
-            if (!text || !window.frogApp || !window.frogApp.user) return;
-
-            input.value = '';
-
-            try {
-                const { db, appId, doc, setDoc, user } = window.frogApp;
-                // Fix for write permissions: Use the user's UID as the message document ID.
-                const messageRef = doc(db, 'artifacts', appId, 'public', 'data', 'messages', user.uid);
-                
-                await setDoc(messageRef, {
-                    text: text,
-                    uid: user.uid,
-                    name: window.frogApp.profileName,
-                    isVerified: !!window.frogApp.isVerifiedDuo,
-                    isPondCrew: !!window.frogApp.isPondCrew,
-                    timestamp: Date.now()
-                }, { merge: true });
-            } catch (error) {
-                console.error("Error sending message:", error);
-            }
+            // Service is currently offline, so disable sending
+            return;
         };
 
         function initChatListener() {
-            if (!window.frogApp || !window.frogApp.user) return;
-            
-            const { db, appId, collection, onSnapshot } = window.frogApp;
-            const messagesRef = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
-
-            if (unsubscribeChat) unsubscribeChat();
-
-            unsubscribeChat = onSnapshot(messagesRef, (snapshot) => {
-                const messages = [];
-                snapshot.forEach(doc => messages.push({ id: doc.id, ...doc.data() }));
-                
-                // Sort by timestamp in memory to avoid complex query indexing issues
-                messages.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-
-                renderMessages(messages, window.frogApp.user);
-            }, (error) => {
-                console.error("Chat error:", error);
-            });
+            // Service is currently offline, skip connecting to the live feed so it doesn't overwrite our animation
+            return;
         }
 
         function renderMessages(messages, user) {
