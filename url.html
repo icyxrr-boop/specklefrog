@@ -11,7 +11,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeFirestore, collection, addDoc, onSnapshot, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Strictly use the injected environment configuration to ensure correct permissions
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
@@ -27,14 +27,873 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         
-        // Use default WebSocket real-time connection for instant sync across Chat and Admin Intel
-        const db = getFirestore(app);
+        // FIX: Force long-polling to bypass WebSocket restrictions in restricted browser environments
+        const db = initializeFirestore(app, {
+            experimentalForceLongPolling: true
+        });
         
         // Use exactly 'default-app-id' as the fallback to guarantee backend security rule matches
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
         // Make necessary tools available to the global scope securely
         window.frogApp = {
+            auth,
+            db,
+            appId,
+            collection,
+            addDoc,
+            onSnapshot,
+            doc,
+            setDoc,
+            user: null,
+            profileName: 'Guest Frog',
+            isVerifiedDuo: false,
+            isPondCrew: false
+        };
+
+        // Strict Mandatory Auth Flow - Must wait for completion before allowing database reads
+        const initAuth = async () => {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                try {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } catch (e) {
+                    await signInAnonymously(auth);
+                }
+            } else {
+                await signInAnonymously(auth);
+            }
+        };
+
+        // MUST securely await the auth connection BEFORE listening to changes, or the DB will reject access
+        initAuth().then(() => {
+            onAuthStateChanged(auth, (user) => {
+                window.frogApp.user = user;
+                if (user && window.onAppReady) {
+                    window.onAppReady(user);
+                }
+            });
+        });
+    </script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'frog': '#10b981',
+                        'deep': '#064e3b',
+                        'pond': '#e0f2fe',
+                        'moss': '#022c22'
+                    },
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; overflow-x: hidden; }
+        
+        .frog-float { animation: float 5s ease-in-out infinite; }
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(2deg); }
+        }
+        
+        .frog-float-delayed { animation: float 5s ease-in-out infinite; animation-delay: 2.5s; }
+
+        .badge-spin { animation: slow-spin 10s linear infinite; }
+        @keyframes slow-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .glass {
+            background: rgba(24, 24, 27, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+        }
+
+        .modal-overlay {
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            display: none;
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .bubble-pulse {
+            animation: pulse-ring 2s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite;
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            80%, 100% { transform: scale(1.3); opacity: 0; }
+        }
+
+        /* Clean custom scrollbar for the news area */
+        .clean-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .clean-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .clean-scrollbar::-webkit-scrollbar-thumb {
+            background: #27272a; /* zinc-800 */
+            border-radius: 10px;
+        }
+        .clean-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #3f3f46; /* zinc-700 */
+        }
+
+        html { scroll-behavior: smooth; }
+        input:focus, textarea:focus { outline: none; border-color: #10b981; }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 selection:bg-frog selection:text-white">
+
+    <!-- Minimal Nav -->
+    <nav class="fixed top-0 w-full z-50 px-4 md:px-6 py-4 md:py-6">
+        <div class="max-w-7xl mx-auto flex justify-between items-center glass rounded-2xl md:rounded-3xl px-4 md:px-6 py-3 md:py-4 border border-zinc-800 shadow-sm">
+            <div class="flex items-center gap-2 md:gap-3">
+                <svg viewBox="0 0 100 100" class="w-6 h-6 md:w-8 md:h-8 fill-frog shrink-0">
+                    <path d="M 5 70 C 5 95 95 95 95 70 C 95 45 60 50 50 65 C 40 50 5 45 5 70 Z" opacity="0.4"/>
+                    <circle cx="30" cy="55" r="14" /><circle cx="22" cy="42" r="6" /><circle cx="38" cy="42" r="6" />
+                    <circle cx="70" cy="55" r="14" /><circle cx="62" cy="42" r="6" /><circle cx="78" cy="42" r="6" />
+                </svg>
+                <div class="flex items-center gap-1 md:gap-2">
+                    <span class="font-extrabold tracking-tighter text-sm sm:text-base md:text-xl uppercase text-white">Speckle Frogs.</span>
+                    <button onclick="toggleModal('verifyModal')" class="relative w-5 h-5 md:w-6 md:h-6 flex items-center justify-center group cursor-pointer focus:outline-none shrink-0">
+                        <div class="absolute inset-0 bg-frog/20 rounded-full scale-110"></div>
+                        <svg viewBox="0 0 100 100" class="absolute inset-0 w-full h-full badge-spin fill-frog/20">
+                            <path d="M50 5 L55 35 L85 30 L65 50 L85 70 L55 65 L50 95 L45 65 L15 70 L35 50 L15 30 L45 35 Z" />
+                        </svg>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="w-2.5 h-2.5 text-frog relative z-10">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-2 md:gap-6">
+                <a href="#about" class="hidden sm:block text-xs md:text-sm font-semibold text-zinc-400 hover:text-frog transition-colors">Our Why</a>
+                <div class="flex items-center gap-2 bg-zinc-800/80 p-1 rounded-xl md:rounded-2xl border border-zinc-700/50">
+                    <button onclick="toggleModal('pondNewsModal')" class="bg-zinc-700/50 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg md:rounded-xl text-[10px] md:text-sm font-bold hover:bg-frog transition-all border border-zinc-600/50">
+                        Pond News
+                    </button>
+                    <a href="#habitat" class="bg-white text-zinc-950 px-3 md:px-4 py-1.5 md:py-2 rounded-lg md:rounded-xl text-[10px] md:text-sm font-bold hover:bg-frog hover:text-white transition-all">
+                        Find Us
+                    </a>
+                    
+                    <!-- ADMIN ONLY PANEL BUTTON -->
+                    <button id="adminPanelBtn" onclick="openAdminStats()" class="hidden relative w-7 h-7 md:w-9 md:h-9 bg-zinc-800 text-zinc-200 rounded-lg md:rounded-xl flex items-center justify-center border border-zinc-700 shadow-sm hover:bg-frog hover:text-white hover:border-frog transition-colors" title="Admin Intel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 md:w-5 md:h-5">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                        <span id="adminCountBadge" class="absolute -top-1.5 -right-1.5 bg-frog text-zinc-950 text-[9px] font-black px-1.5 py-0.5 rounded-full border border-zinc-900 shadow-md">0</span>
+                    </button>
+
+                    <button id="profileBtn" onclick="handleProfileClick()" class="relative w-7 h-7 md:w-9 md:h-9 bg-zinc-900 rounded-lg md:rounded-xl flex items-center justify-center border border-zinc-700 shadow-sm overflow-hidden text-zinc-300 hover:text-white transition-colors">
+                        <svg viewBox="0 0 24 24" class="w-4 h-4 md:w-5 md:h-5 fill-current" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 2C9.5 2 7.5 4 7.5 6.5C7.5 7.8 8.1 9 9 9.8C6.1 11.1 4 13.8 4 17C4 19.8 6.2 22 9 22H15C17.8 22 20 19.8 20 17C20 13.8 17.9 11.1 15 9.8C15.9 9 16.5 7.8 16.5 6.5C16.5 4 14.5 2 12 2Z" fill-opacity="0.2"/>
+                            <path d="M12 21.5C10 21.5 8 20.5 8 18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+                        </svg>
+                        <span id="authDot" class="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-zinc-600 rounded-full border border-zinc-900"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Support Bubble Frog Button -->
+    <div class="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-[60] flex flex-col items-end gap-4">
+        <!-- Chat Window -->
+        <div id="supportWindow" class="hidden scale-90 opacity-0 origin-bottom-right transition-all duration-300 bg-zinc-900 w-[calc(100vw-2rem)] sm:w-[350px] max-w-sm rounded-[2rem] shadow-2xl border border-zinc-800 overflow-hidden mb-2">
+            <div class="bg-frog p-4 text-white shadow-md relative z-10 border-b border-frog/50">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
+                        <svg viewBox="0 0 100 100" class="w-6 h-6 fill-white">
+                            <path d="M 5 70 C 5 95 95 95 95 70 C 95 45 60 50 50 65 C 40 50 5 45 5 70 Z" opacity="0.4"/>
+                            <circle cx="30" cy="55" r="14" /><circle cx="22" cy="42" r="6" /><circle cx="38" cy="42" r="6" />
+                            <circle cx="70" cy="55" r="14" /><circle cx="62" cy="42" r="6" /><circle cx="78" cy="42" r="6" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h4 class="font-bold leading-none text-lg text-white">FrogService</h4>
+                        <span class="text-[9px] opacity-90 uppercase tracking-widest font-black text-white">Customer Support</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Messages Area -->
+            <div id="chatMessages" class="h-[50vh] sm:h-72 overflow-y-auto p-4 bg-zinc-950 flex flex-col gap-3 clean-scrollbar">
+                <div class="text-center text-xs text-zinc-500 italic my-auto">Connecting to FrogService...</div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="p-4 bg-zinc-900 border-t border-zinc-800">
+                <div class="flex flex-col gap-2">
+                    <textarea id="chatInput" placeholder="How can we help you today?" class="w-full h-12 p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm resize-none focus:bg-zinc-800 focus:border-frog text-white transition-colors placeholder-zinc-600" onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); window.sendChatMessage(); }"></textarea>
+                    <button onclick="window.sendChatMessage()" class="w-full py-2.5 bg-white text-zinc-950 rounded-xl text-sm font-bold hover:bg-frog hover:text-white transition-colors shadow-sm">Send Message</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Floating Button -->
+        <button onclick="toggleSupport()" class="relative group focus:outline-none">
+            <!-- Pulsing Rings -->
+            <div class="absolute inset-0 bg-frog rounded-full bubble-pulse"></div>
+            <div class="absolute inset-0 bg-frog rounded-full bubble-pulse" style="animation-delay: 0.5s"></div>
+            
+            <!-- Main Button Body -->
+            <div class="relative w-16 h-16 bg-frog rounded-full flex items-center justify-center shadow-lg shadow-frog/30 group-hover:scale-110 transition-transform border-2 border-zinc-950">
+                <!-- Double Frog Lilypad Icon -->
+                <svg viewBox="0 0 100 100" class="w-10 h-10 fill-white">
+                    <path d="M 5 70 C 5 95 95 95 95 70 C 95 45 60 50 50 65 C 40 50 5 45 5 70 Z" opacity="0.4"/>
+                    <circle cx="30" cy="55" r="14" /><circle cx="22" cy="42" r="6" /><circle cx="38" cy="42" r="6" />
+                    <circle cx="70" cy="55" r="14" /><circle cx="62" cy="42" r="6" /><circle cx="78" cy="42" r="6" />
+                </svg>
+                <!-- Notification Dot -->
+                <div class="absolute top-0 right-0 w-4 h-4 bg-zinc-950 border-4 border-frog rounded-full"></div>
+            </div>
+        </button>
+    </div>
+
+    <!-- Modals (Admin Stats, Verify, Alerts, Auth, Profile, News) -->
+    <div id="pondNewsModal" class="fixed inset-0 z-[130] modal-overlay items-center justify-center p-4 md:p-6" onclick="closeOnOverlay(event, 'pondNewsModal')">
+        <div class="bg-zinc-950 rounded-[2.5rem] w-full max-w-lg p-6 md:p-8 shadow-2xl shadow-frog/5 relative overflow-hidden border border-zinc-800">
+            <!-- Subtle ambient glow -->
+            <div class="absolute top-0 left-1/2 -translate-x-1/2 w-full h-32 bg-frog/10 blur-[60px] pointer-events-none"></div>
+
+            <div class="flex justify-between items-center mb-8 relative z-10">
+                <h3 class="text-2xl md:text-3xl font-extrabold text-white flex items-center gap-4 tracking-tight">
+                    <div class="w-12 h-12 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center justify-center text-frog shadow-sm">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                        </svg>
+                    </div>
+                    Pond News
+                </h3>
+                <button onclick="toggleModal('pondNewsModal')" class="text-zinc-500 hover:text-white transition-colors p-2.5 bg-zinc-900 rounded-full border border-zinc-800 hover:border-zinc-700">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            
+            <div class="space-y-4 max-h-[60vh] overflow-y-auto pr-3 clean-scrollbar relative z-10">
+                <!-- Highlighted News Card -->
+                <div class="relative p-6 bg-zinc-900 rounded-3xl border border-zinc-800 hover:border-frog/50 transition-all group overflow-hidden shadow-sm">
+                    <!-- Accent Line -->
+                    <div class="absolute top-0 left-0 w-1.5 h-full bg-frog group-hover:w-2 transition-all"></div>
+                    <!-- Decorative Background SVG -->
+                    <div class="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                        <svg viewBox="0 0 100 100" class="w-32 h-32 fill-frog">
+                            <path d="M 5 70 C 5 95 95 95 95 70 C 95 45 60 50 50 65 C 40 50 5 45 5 70 Z" opacity="0.4"/>
+                            <circle cx="30" cy="55" r="14" /><circle cx="22" cy="42" r="6" /><circle cx="38" cy="42" r="6" />
+                            <circle cx="70" cy="55" r="14" /><circle cx="62" cy="42" r="6" /><circle cx="78" cy="42" r="6" />
+                        </svg>
+                    </div>
+                    
+                    <div class="flex items-center gap-2 mb-3 relative z-10">
+                        <span class="px-2.5 py-1 bg-frog/10 text-frog text-[10px] font-black uppercase tracking-widest rounded-lg border border-frog/20">Latest</span>
+                        <span class="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">May 2026</span>
+                    </div>
+                    <h4 class="text-xl font-extrabold text-white mb-2 tracking-tight relative z-10">Upgrading Soon!</h4>
+                    <p class="text-sm text-zinc-400 font-medium leading-relaxed relative z-10">We are officially upgrading our froggy suits soon and preparing to attend local fetes this summer. Double the frogs, double the joy on the road!</p>
+                </div>
+
+                <!-- Past News Card -->
+                <div class="relative p-6 bg-zinc-900 rounded-3xl border border-zinc-800 hover:border-zinc-700 transition-all group overflow-hidden shadow-sm">
+                    <div class="absolute top-0 left-0 w-1.5 h-full bg-zinc-700 group-hover:w-2 transition-all group-hover:bg-zinc-600"></div>
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">April 2026</span>
+                    </div>
+                    <h4 class="text-xl font-extrabold text-zinc-200 mb-2 tracking-tight">Lilypad Chat is Live</h4>
+                    <p class="text-sm text-zinc-400 font-medium leading-relaxed">Our new real-time chat is now available! Sign up to claim your secure Pond Crew badge and start croaking with the community.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="adminStatsModal" class="fixed inset-0 z-[130] modal-overlay items-center justify-center p-4 md:p-6" onclick="closeOnOverlay(event, 'adminStatsModal')">
+        <div class="bg-zinc-900 rounded-[2rem] w-full max-w-sm p-8 shadow-2xl text-center relative overflow-hidden border border-zinc-800">
+            <div class="w-16 h-16 bg-zinc-800 rounded-2xl flex items-center justify-center mx-auto mb-6 text-white">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-8 h-8">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            </div>
+            <h3 class="text-2xl font-extrabold mb-2 text-white">Pond Intel</h3>
+            <p class="text-zinc-400 mb-6 text-sm font-medium leading-relaxed">Total registered Froggy accounts in the pond.</p>
+            <div class="text-6xl font-black text-frog mb-8" id="visitorCountDisplay">--</div>
+            <button onclick="toggleModal('adminStatsModal')" class="w-full py-4 bg-white text-zinc-950 rounded-2xl font-bold shadow-lg hover:scale-[1.02] transition-transform">Close Intel</button>
+        </div>
+    </div>
+
+    <div id="welcomeAlertModal" class="fixed inset-0 z-[110] modal-overlay items-center justify-center p-4 md:p-6" onclick="closeOnOverlay(event, 'welcomeAlertModal')">
+        <div class="bg-zinc-900 rounded-[2rem] w-full max-w-sm p-8 shadow-2xl text-center relative overflow-hidden border border-zinc-800">
+            <div class="w-16 h-16 bg-frog/10 rounded-2xl flex items-center justify-center mx-auto mb-6 text-frog">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-8 h-8">
+                    <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
+                </svg>
+            </div>
+            <h3 class="text-2xl font-extrabold mb-2 text-white">Welcome to the Pond!</h3>
+            <p class="text-zinc-400 mb-8 text-sm font-medium leading-relaxed">You've successfully hopped in. You'll only ever see this alert once in a lifetime, so enjoy the magic and start croaking!</p>
+            <button onclick="toggleModal('welcomeAlertModal')" class="w-full py-4 bg-frog text-white rounded-2xl font-bold shadow-lg shadow-frog/20 hover:scale-[1.02] transition-transform">Awesome!</button>
+        </div>
+    </div>
+
+    <div id="pondCrewAlertModal" class="fixed inset-0 z-[120] modal-overlay items-center justify-center p-4 md:p-6" onclick="closeOnOverlay(event, 'pondCrewAlertModal')">
+        <div class="bg-zinc-900 rounded-[2rem] w-full max-w-sm p-8 shadow-2xl text-center relative overflow-hidden border border-zinc-800">
+            <div class="w-16 h-16 bg-blue-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6 text-blue-500">
+                <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" class="w-8 h-8">
+                    <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+                </svg>
+            </div>
+            <h3 class="text-2xl font-extrabold mb-2 text-white">Pond Crew Official!</h3>
+            <p class="text-zinc-400 mb-8 text-sm font-medium leading-relaxed">You've officially been Crewed! This is a one-time alert to let you know you have the exclusive Pond Crew badge. Wear it with pride!</p>
+            <button onclick="toggleModal('pondCrewAlertModal')" class="w-full py-4 bg-blue-500 text-white rounded-2xl font-bold shadow-lg shadow-blue-500/20 hover:scale-[1.02] transition-transform">Ribbit Yeah!</button>
+        </div>
+    </div>
+
+    <div id="verifyModal" class="fixed inset-0 z-[100] modal-overlay items-center justify-center p-4 md:p-6" onclick="closeOnOverlay(event, 'verifyModal')">
+        <div class="bg-zinc-900 rounded-[2rem] w-full max-w-sm p-8 shadow-2xl text-center relative overflow-hidden border border-zinc-800">
+            <div class="w-16 h-16 bg-frog/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="w-8 h-8 text-frog"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </div>
+            <h3 class="text-2xl font-extrabold mb-2 text-white">Verified Duo</h3>
+            <p class="text-zinc-400 mb-6 text-sm">Official joy-spreaders since 2026.</p>
+            <button onclick="toggleModal('verifyModal')" class="w-full py-4 bg-white text-zinc-950 rounded-2xl font-bold">Ribbit!</button>
+        </div>
+    </div>
+
+    <div id="authModal" class="fixed inset-0 z-[100] modal-overlay items-center justify-center p-4" onclick="closeOnOverlay(event, 'authModal')">
+        <div class="bg-zinc-900 rounded-[2.5rem] w-full max-w-sm p-6 sm:p-8 md:p-10 shadow-2xl relative border border-zinc-800 max-h-[90vh] overflow-y-auto clean-scrollbar">
+            <h3 id="authTitle" class="text-2xl md:text-3xl font-extrabold tracking-tight mb-2 text-white">Join the Pond</h3>
+            <p class="text-zinc-400 text-sm mb-5 md:mb-8 italic font-semibold">"High fives only inside."</p>
+            <div class="space-y-3 md:space-y-4">
+                <input type="email" id="authEmail" placeholder="Froggy Email" class="w-full px-5 md:px-6 py-3.5 md:py-4 bg-zinc-950 border border-zinc-800 text-white rounded-xl md:rounded-2xl font-medium focus:border-frog focus:bg-zinc-900 transition-colors placeholder-zinc-600">
+                <input type="password" id="authPass" placeholder="Secret Croak" class="w-full px-5 md:px-6 py-3.5 md:py-4 bg-zinc-950 border border-zinc-800 text-white rounded-xl md:rounded-2xl font-medium focus:border-frog focus:bg-zinc-900 transition-colors placeholder-zinc-600">
+                <button id="mainAuthBtn" onclick="performAuth()" class="w-full py-4 md:py-5 bg-frog text-white rounded-xl md:rounded-2xl font-bold text-base md:text-lg shadow-lg shadow-frog/20 hover:scale-[1.02] transition-transform">Log In</button>
+                <button onclick="toggleAuthMode()" id="switchAuthBtn" class="w-full py-2 text-zinc-500 text-[10px] font-black uppercase tracking-widest hover:text-zinc-300 transition-colors">Or Create Account</button>
+            </div>
+            <p id="authError" class="text-red-500 text-xs mt-4 text-center hidden font-bold"></p>
+        </div>
+    </div>
+
+    <div id="profileModal" class="fixed inset-0 z-[100] modal-overlay items-center justify-center p-4" onclick="closeOnOverlay(event, 'profileModal')">
+        <div class="bg-zinc-900 rounded-[2.5rem] w-full max-w-sm overflow-hidden shadow-2xl relative border border-zinc-800">
+            <div class="h-24 bg-frog relative">
+                <button onclick="toggleModal('profileModal')" class="absolute top-4 right-4 text-white/50 hover:text-white transition-colors">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="px-6 pb-6 -mt-10 relative text-center">
+                <div class="w-20 h-20 bg-zinc-800 rounded-2xl p-1.5 mx-auto shadow-xl mb-4 border border-zinc-700">
+                    <div class="w-full h-full bg-moss rounded-xl flex items-center justify-center overflow-hidden border border-frog/20">
+                        <svg viewBox="0 0 100 100" class="w-12 h-12 fill-frog">
+                            <path d="M 5 70 C 5 95 95 95 95 70 C 95 45 60 50 50 65 C 40 50 5 45 5 70 Z" opacity="0.4"/>
+                            <circle cx="30" cy="55" r="14" /><circle cx="22" cy="42" r="6" /><circle cx="38" cy="42" r="6" />
+                            <circle cx="70" cy="55" r="14" /><circle cx="62" cy="42" r="6" /><circle cx="78" cy="42" r="6" />
+                        </svg>
+                    </div>
+                </div>
+                <h3 id="userDisplay" class="text-xl font-extrabold tracking-tight italic text-zinc-200">Loading Frog...</h3>
+                <p id="userUid" class="text-[8px] font-mono text-zinc-500 mt-1 uppercase truncate px-4"></p>
+                <div class="grid grid-cols-2 gap-3 mt-6 mb-6 text-left">
+                    <div class="p-3 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
+                        <div class="text-[8px] font-black text-zinc-500 uppercase">Waddle Pts</div>
+                        <div class="font-extrabold text-sm md:text-base text-zinc-100">1,240</div>
+                    </div>
+                    <div class="p-3 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
+                        <div class="text-[8px] font-black text-zinc-500 uppercase">Pond Rank</div>
+                        <div id="userRank" class="font-extrabold text-sm md:text-base text-frog flex items-center">Tadpole</div>
+                    </div>
+                </div>
+                <button onclick="performLogout()" class="w-full py-3.5 bg-zinc-800 text-zinc-400 rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-zinc-700 hover:text-zinc-200 transition-colors">Leave Pond</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hero Section -->
+    <section class="relative pt-28 sm:pt-32 md:pt-44 pb-12 sm:pb-16 md:pb-20 px-4 md:px-6 overflow-hidden">
+        <div class="max-w-7xl mx-auto grid lg:grid-cols-2 gap-8 md:gap-12 items-center">
+            <div class="z-20 relative text-center lg:text-left">
+                <div class="inline-block px-3 py-1 bg-moss text-frog rounded-full text-[8px] md:text-[10px] font-black uppercase tracking-widest mb-4 md:mb-6 border border-frog/20">London's Friendly Giant Frogs</div>
+                <h1 class="text-4xl sm:text-6xl md:text-8xl lg:text-9xl font-extrabold tracking-tighter leading-tight md:leading-[0.85] mb-6 md:mb-8 text-white">
+                    Double the <span class="text-frog">Frogs.</span><br>
+                    Double the <span class="text-zinc-500">Joy.</span>
+                </h1>
+                <p class="text-sm sm:text-base md:text-xl text-zinc-400 max-w-lg mx-auto lg:mx-0 leading-relaxed mb-8 md:mb-10 font-medium px-2 md:px-0">
+                    Meet <span class="text-white font-bold underline decoration-frog/50 decoration-2">Tiddles</span> and <span class="text-white font-bold underline decoration-frog/50 decoration-2">Speckle</span>: two teenagers in blow-up suits with a single mission to make you smile.
+                </p>
+                <a href="#habitat" class="w-full sm:w-auto px-8 sm:px-10 md:px-12 py-4 md:py-5 bg-frog text-white rounded-xl md:rounded-2xl font-bold text-base md:text-lg inline-block shadow-xl shadow-frog/20 hover:scale-105 transition-transform">Visit our Pond</a>
+            </div>
+
+            <!-- Mobile-Adjusted Hero Art -->
+            <div class="relative h-[280px] md:h-[400px] flex justify-center items-center">
+                <div class="absolute w-full h-full bg-frog/10 blur-[80px] md:blur-[120px] rounded-full"></div>
+                <div class="relative w-full max-w-[280px] md:max-w-md flex items-center justify-center">
+                    <div class="frog-float-delayed absolute left-0 opacity-20">
+                        <svg viewBox="0 0 200 200" class="w-32 md:w-48 h-32 md:h-48 fill-frog/50">
+                            <path d="M 10 140 C 10 190 190 190 190 140 C 190 90 120 100 100 130 C 80 100 10 90 10 140 Z" opacity="0.4" />
+                            <circle cx="60" cy="110" r="28" /><circle cx="44" cy="84" r="12" /><circle cx="76" cy="84" r="12" />
+                            <circle cx="140" cy="110" r="28" /><circle cx="124" cy="84" r="12" /><circle cx="156" cy="84" r="12" />
+                        </svg>
+                    </div>
+                    <div class="frog-float relative z-10">
+                        <svg viewBox="0 0 200 200" class="w-48 md:w-72 h-48 md:h-72 fill-frog drop-shadow-2xl">
+                            <path d="M 10 140 C 10 190 190 190 190 140 C 190 90 120 100 100 130 C 80 100 10 90 10 140 Z" opacity="0.4" />
+                            <circle cx="60" cy="110" r="28" /><circle cx="44" cy="84" r="12" /><circle cx="76" cy="84" r="12" />
+                            <circle cx="44" cy="84" r="4" fill="white" /><circle cx="76" cy="84" r="4" fill="white" />
+                            <circle cx="140" cy="110" r="28" /><circle cx="124" cy="84" r="12" /><circle cx="156" cy="84" r="12" />
+                            <circle cx="124" cy="84" r="4" fill="white" /><circle cx="156" cy="84" r="4" fill="white" />
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Manifesto / The Meaning -->
+    <section id="about" class="py-20 md:py-32 px-4 md:px-6 bg-zinc-950 relative overflow-hidden border-t border-zinc-900">
+        <div class="absolute top-0 right-0 p-8 md:p-12 opacity-5 select-none pointer-events-none">
+            <h1 class="text-[30vw] lg:text-[20vw] font-black leading-none text-white">RIBBIT</h1>
+        </div>
+
+        <div class="max-w-5xl mx-auto">
+            <div class="text-center mb-16 md:mb-20">
+                <h2 class="text-4xl md:text-7xl font-extrabold tracking-tighter mb-4 text-white">The Meaning.</h2>
+                <div class="flex justify-center gap-2">
+                    <div class="w-10 md:w-12 h-1.5 bg-frog rounded-full"></div>
+                    <div class="w-3 md:w-4 h-1.5 bg-zinc-700 rounded-full"></div>
+                </div>
+            </div>
+
+            <div class="space-y-12 md:space-y-16 text-center">
+                <div class="max-w-3xl mx-auto space-y-8 md:space-y-10 px-2">
+                    <p class="text-lg sm:text-2xl md:text-5xl font-extrabold tracking-tight leading-tight text-white">
+                        "When Tiddles and Speckle put the suits on, <span class="text-frog italic">our problems disappear.</span>"
+                    </p>
+                    <p class="text-lg sm:text-2xl md:text-5xl font-extrabold tracking-tight leading-tight text-zinc-500">
+                        "In a world that can be heavy, we chose to be <span class="text-zinc-200">light and inflatable.</span>"
+                    </p>
+                    <p class="text-lg sm:text-2xl md:text-5xl font-extrabold tracking-tight leading-tight italic decoration-frog decoration-wavy decoration-2 text-white">
+                        "If you see a giant frog, the universe is giving you a break."
+                    </p>
+                </div>
+
+                <!-- The Rules Section (Mobile-Optimized Grid) -->
+                <div class="pt-16 md:pt-20 border-t border-zinc-800">
+                    <h3 class="text-[9px] md:text-xs font-black uppercase tracking-[0.3em] md:tracking-[0.4em] text-zinc-600 mb-10 md:mb-12">The Pond Laws</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+                        <!-- Law 1 -->
+                        <div class="p-6 md:p-8 bg-zinc-900 rounded-[1.5rem] md:rounded-[2.5rem] shadow-sm border border-zinc-800 hover:scale-[1.02] transition-transform group hover:border-frog/30">
+                            <div class="w-10 h-10 md:w-12 md:h-12 bg-frog/10 rounded-xl md:rounded-2xl flex items-center justify-center mx-auto mb-5 md:mb-6 group-hover:bg-frog group-hover:text-white transition-colors text-frog border border-frog/20">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 md:w-6 md:h-6">
+                                    <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"></path>
+                                    <path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"></path>
+                                    <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"></path>
+                                    <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"></path>
+                                </svg>
+                            </div>
+                            <h4 class="font-black text-lg md:text-xl mb-2 uppercase italic tracking-tighter text-white">High Fives Only</h4>
+                            <p class="text-xs md:text-sm text-zinc-400 font-medium leading-relaxed">No handshakes. No bows. Just pure, palm-to-palm energy transfer. Keep it moving.</p>
+                        </div>
+                        <!-- Law 2 -->
+                        <div class="p-6 md:p-8 bg-zinc-900 rounded-[1.5rem] md:rounded-[2.5rem] shadow-sm border border-zinc-800 hover:scale-[1.02] transition-transform group hover:border-frog/30">
+                            <div class="w-10 h-10 md:w-12 md:h-12 bg-frog/10 rounded-xl md:rounded-2xl flex items-center justify-center mx-auto mb-5 md:mb-6 group-hover:bg-frog group-hover:text-white transition-colors text-frog border border-frog/20">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 md:w-6 md:h-6">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <circle cx="12" cy="12" r="4"></circle>
+                                    <line x1="12" y1="2" x2="12" y2="22"></line>
+                                    <line x1="2" y1="12" x2="22" y2="12"></line>
+                                </svg>
+                            </div>
+                            <h4 class="font-black text-lg md:text-xl mb-2 uppercase italic tracking-tighter text-white">Respect the Mesh</h4>
+                            <p class="text-xs md:text-sm text-zinc-400 font-medium leading-relaxed">The eyes are the windows to the soul. Don't poke 'em, just look into 'em and feel the joy.</p>
+                        </div>
+                        <!-- Law 3 -->
+                        <div class="p-6 md:p-8 bg-zinc-900 rounded-[1.5rem] md:rounded-[2.5rem] shadow-sm border border-zinc-800 hover:scale-[1.02] transition-transform group hover:border-frog/30">
+                            <div class="w-10 h-10 md:w-12 md:h-12 bg-frog/10 rounded-xl md:rounded-2xl flex items-center justify-center mx-auto mb-5 md:mb-6 group-hover:bg-frog group-hover:text-white transition-colors text-frog border border-frog/20">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 md:w-6 md:h-6">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                                </svg>
+                            </div>
+                            <h4 class="font-black text-lg md:text-xl mb-2 uppercase italic tracking-tighter text-white">Always Green</h4>
+                            <p class="text-xs md:text-sm text-zinc-400 font-medium leading-relaxed">Whatever happens in the suit stays in the suit. We are forever green and forever happy.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="py-12 px-6 flex flex-col items-center border-t border-zinc-900 bg-zinc-950 gap-8">
+        <div class="flex flex-col items-center gap-4">
+            <span class="text-[10px] md:text-xs font-black text-zinc-500 uppercase tracking-widest">You can find us on:</span>
+            <div class="flex items-center gap-3">
+                <a href="https://tiktok.com/@specklefrogs2" target="_blank" rel="noopener noreferrer" class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-frog hover:border-frog/50 hover:bg-zinc-800 transition-all group shadow-sm">
+                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" class="w-4 h-4 group-hover:scale-110 transition-transform">
+                        <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
+                    </svg>
+                </a>
+                <a href="https://instagram.com/speclefrogs2" target="_blank" rel="noopener noreferrer" class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-frog hover:border-frog/50 hover:bg-zinc-800 transition-all group shadow-sm">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 group-hover:scale-110 transition-transform">
+                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                        <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                    </svg>
+                </a>
+            </div>
+        </div>
+        <div class="text-[9px] md:text-[10px] font-black text-zinc-600 uppercase tracking-widest">
+            &copy; 2026 Speckle Frogs | London, UK
+        </div>
+    </footer>
+
+    <script>
+        // Main App Logic Script
+        let unsubscribeAdmin = null;
+        let unsubscribeChat = null;
+
+        function toggleModal(id) {
+            const modal = document.getElementById(id);
+            modal.classList.toggle('active');
+            
+            // Smart check to ensure scrolling is disabled if ANY modal is still open
+            const anyActive = document.querySelectorAll('.modal-overlay.active').length > 0;
+            document.body.style.overflow = anyActive ? 'hidden' : 'auto';
+        }
+
+        function closeOnOverlay(e, id) {
+            if (e.target.id === id) toggleModal(id);
+        }
+
+        function handleProfileClick() {
+            if (window.frogApp && window.frogApp.profileName !== 'Guest Frog') {
+                toggleModal('profileModal');
+            } else {
+                toggleModal('authModal');
+            }
+        }
+
+        function initAdminListener() {
+            if (!window.frogApp || !window.frogApp.db) return;
+            const { db, appId, collection, onSnapshot } = window.frogApp;
+            const accountsRef = collection(db, 'artifacts', appId, 'public', 'data', 'accounts');
+            
+            if (unsubscribeAdmin) unsubscribeAdmin();
+            
+            unsubscribeAdmin = onSnapshot(accountsRef, (snapshot) => {
+                const size = snapshot.size;
+                const countDisplay = document.getElementById('visitorCountDisplay');
+                if (countDisplay) countDisplay.innerText = size;
+                
+                const badgeDisplay = document.getElementById('adminCountBadge');
+                if (badgeDisplay) badgeDisplay.innerText = size;
+            }, (error) => {
+                console.error("Admin stat error:", error);
+                const countDisplay = document.getElementById('visitorCountDisplay');
+                if (countDisplay) countDisplay.innerText = 'Err';
+            });
+        }
+
+        function openAdminStats() {
+            toggleModal('adminStatsModal');
+            // The data is now kept automatically in sync via initAdminListener!
+        }
+
+        async function recordAccount(email, profileName) {
+            if (!email || email === 'smithpearson79@gmail.com' || !window.frogApp || !window.frogApp.user) return;
+            try {
+                const { db, appId, doc, setDoc, user } = window.frogApp;
+                // STRICT PERMISSIONS FIX: The document ID must strictly map to the authenticated user.uid 
+                // in this secure environment for public document creation to succeed.
+                const accountRef = doc(db, 'artifacts', appId, 'public', 'data', 'accounts', user.uid);
+                // merge:true ensures we don't accidentally wipe data if they already exist
+                await setDoc(accountRef, { 
+                    email: email,
+                    name: profileName,
+                    lastSeen: Date.now() 
+                }, { merge: true });
+            } catch (err) {
+                console.error("Error recording account:", err);
+            }
+        }
+
+        function toggleSupport() {
+            const windowEl = document.getElementById('supportWindow');
+            const isHidden = windowEl.classList.contains('hidden');
+            
+            if (isHidden) {
+                windowEl.classList.remove('hidden');
+                setTimeout(() => {
+                    windowEl.classList.replace('scale-90', 'scale-100');
+                    windowEl.classList.replace('opacity-0', 'opacity-100');
+                }, 10);
+            } else {
+                windowEl.classList.replace('scale-100', 'scale-90');
+                windowEl.classList.replace('opacity-100', 'opacity-0');
+                setTimeout(() => windowEl.classList.add('hidden'), 300);
+            }
+        }
+
+        function escapeHtml(unsafe) {
+            return (unsafe || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        window.sendChatMessage = async () => {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if (!text || !window.frogApp || !window.frogApp.user) return;
+
+            input.value = '';
+
+            try {
+                const { db, appId, doc, setDoc, user } = window.frogApp;
+                // Fix for write permissions: Use the user's UID as the message document ID.
+                const messageRef = doc(db, 'artifacts', appId, 'public', 'data', 'messages', user.uid);
+                
+                await setDoc(messageRef, {
+                    text: text,
+                    uid: user.uid,
+                    name: window.frogApp.profileName,
+                    isVerified: !!window.frogApp.isVerifiedDuo,
+                    isPondCrew: !!window.frogApp.isPondCrew,
+                    timestamp: Date.now()
+                }, { merge: true });
+            } catch (error) {
+                console.error("Error sending message:", error);
+            }
+        };
+
+        function initChatListener() {
+            if (!window.frogApp || !window.frogApp.user) return;
+            
+            const { db, appId, collection, onSnapshot } = window.frogApp;
+            const messagesRef = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
+
+            if (unsubscribeChat) unsubscribeChat();
+
+            unsubscribeChat = onSnapshot(messagesRef, (snapshot) => {
+                const messages = [];
+                snapshot.forEach(doc => messages.push({ id: doc.id, ...doc.data() }));
+                
+                // Sort by timestamp in memory to avoid complex query indexing issues
+                messages.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+                renderMessages(messages, window.frogApp.user);
+            }, (error) => {
+                console.error("Chat error:", error);
+            });
+        }
+
+        function renderMessages(messages, user) {
+            const chatBox = document.getElementById('chatMessages');
+            
+            if (messages.length === 0) {
+                chatBox.innerHTML = '<div class="text-center text-xs text-zinc-500 italic my-auto">Welcome to FrogService!<br>How can we help you today?</div>';
+                return;
+            }
+
+            chatBox.innerHTML = messages.map(msg => {
+                const isMe = msg.uid === user.uid;
+                const displayName = msg.name || 'Frog';
+                
+                let userBadges = '';
+                if (msg.isVerified) {
+                    userBadges += `<span class="relative w-3.5 h-3.5 ml-1 flex items-center justify-center shrink-0" title="Verified Duo"><span class="absolute inset-0 bg-frog/20 rounded-full scale-110"></span><svg viewBox="0 0 100 100" class="absolute inset-0 w-full h-full badge-spin fill-frog/20"><path d="M50 5 L55 35 L85 30 L65 50 L85 70 L55 65 L50 95 L45 65 L15 70 L35 50 L15 30 L45 35 Z"></path></svg><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="w-2 h-2 text-frog relative z-10"><polyline points="20 6 9 17 4 12"></polyline></svg></span>`;
+                }
+                if (msg.isPondCrew) {
+                    userBadges += `<span class="relative w-3.5 h-3.5 ml-1 flex items-center justify-center shrink-0 text-blue-500 drop-shadow-sm" title="Pond Crew"><span class="absolute inset-0 bg-blue-500/20 rounded-full scale-110"></span><svg viewBox="0 0 100 100" class="absolute inset-0 w-full h-full badge-spin fill-blue-500/20"><path d="M50 5 L55 35 L85 30 L65 50 L85 70 L55 65 L50 95 L45 65 L15 70 L35 50 L15 30 L45 35 Z"></path></svg><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" class="w-2.5 h-2.5 relative z-10"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg></span>`;
+                }
+
+                return `
+                    <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'}">
+                        <span class="text-[9px] font-extrabold text-zinc-500 mb-0.5 px-1 uppercase tracking-wider flex items-center">${escapeHtml(displayName)}${userBadges}</span>
+                        <div class="px-3.5 py-2 max-w-[85%] text-sm leading-relaxed shadow-sm ${isMe ? 'bg-frog text-white rounded-[1.25rem] rounded-br-sm' : 'bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-[1.25rem] rounded-bl-sm'}">
+                            ${escapeHtml(msg.text)}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // Simulates logging in by tracking a display name locally, bypassing custom token conflicts
+        function performAuth() {
+            const emailInput = document.getElementById('authEmail').value.trim();
+            const passInput = document.getElementById('authPass').value.trim();
+            const err = document.getElementById('authError');
+            
+            if (!emailInput || !passInput) {
+                err.innerText = "Please enter both email and password.";
+                err.classList.remove('hidden');
+                return;
+            }
+
+            err.classList.add('hidden');
+            
+            const lowerEmail = emailInput.toLowerCase();
+            
+            // Apply badges!
+            window.frogApp.isVerifiedDuo = (lowerEmail === 'smithpearson79@gmail.com');
+            window.frogApp.isPondCrew = (lowerEmail === 'artistlnf441@gmail.com' || lowerEmail === 'smithpearson79@gmail.com');
+            
+            // Extract the part before the @ to use as their chat name
+            const username = emailInput.split('@')[0];
+            window.frogApp.profileName = username;
+            
+            // Save to local storage so they stay logged in across refreshes
+            localStorage.setItem('frogProfile', username);
+            localStorage.setItem('frogEmail', lowerEmail);
+            
+            document.getElementById('userDisplay').innerText = window.frogApp.profileName;
+            
+            const spinningBadgeHTML = `<span class="relative w-4 h-4 ml-1.5 flex items-center justify-center shrink-0" title="Verified Duo"><span class="absolute inset-0 bg-frog/20 rounded-full scale-110"></span><svg viewBox="0 0 100 100" class="absolute inset-0 w-full h-full badge-spin fill-frog/20"><path d="M50 5 L55 35 L85 30 L65 50 L85 70 L55 65 L50 95 L45 65 L15 70 L35 50 L15 30 L45 35 Z"></path></svg><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="w-2.5 h-2.5 text-frog relative z-10"><polyline points="20 6 9 17 4 12"></polyline></svg></span>`;
+            const pondCrewBadgeHTML = `<span class="relative w-4 h-4 ml-1.5 flex items-center justify-center shrink-0 text-blue-500 drop-shadow-sm" title="Pond Crew"><span class="absolute inset-0 bg-blue-500/20 rounded-full scale-110"></span><svg viewBox="0 0 100 100" class="absolute inset-0 w-full h-full badge-spin fill-blue-500/20"><path d="M50 5 L55 35 L85 30 L65 50 L85 70 L55 65 L50 95 L45 65 L15 70 L35 50 L15 30 L45 35 Z"></path></svg><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" class="w-2.5 h-2.5 relative z-10"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg></span>`;
+
+            if (window.frogApp.isVerifiedDuo && window.frogApp.isPondCrew) {
+                document.getElementById('userRank').innerHTML = `Verified Duo & Crew ${spinningBadgeHTML}${pondCrewBadgeHTML}`;
+            } else if (window.frogApp.isVerifiedDuo) {
+                document.getElementById('userRank').innerHTML = `Verified Duo ${spinningBadgeHTML}`;
+            } else if (window.frogApp.isPondCrew) {
+                document.getElementById('userRank').innerHTML = `Pond Crew ${pondCrewBadgeHTML}`;
+            } else {
+                document.getElementById('userRank').innerHTML = 'Froggy Friend';
+            }
+            
+            // Visual indicators of setup
+            document.getElementById('authDot').classList.replace('bg-zinc-600', 'bg-frog');
+            document.getElementById('authDot').classList.replace('border-zinc-900', 'border-white');
+
+            // Manage Admin Eye Button Visibility
+            if (lowerEmail === 'smithpearson79@gmail.com') {
+                document.getElementById('adminPanelBtn').classList.remove('hidden');
+                initAdminListener(); // Start tracking live accounts immediately
+            } else {
+                document.getElementById('adminPanelBtn').classList.add('hidden');
+                // Ensure the account is logged for non-admins
+                recordAccount(lowerEmail, username);
+            }
+            
+            toggleModal('authModal');
+
+            // Trigger the one-time welcome alert
+            if (!localStorage.getItem('welcomed_' + username)) {
+                localStorage.setItem('welcomed_' + username, 'true');
+                setTimeout(() => toggleModal('welcomeAlertModal'), 400);
+            }
+            
+            // Trigger the one-time Pond Crew alert
+            if (window.frogApp.isPondCrew && !localStorage.getItem('crew_welcomed_' + username)) {
+                localStorage.setItem('crew_welcomed_' + username, 'true');
+                setTimeout(() => toggleModal('pondCrewAlertModal'), 500);
+            }
+        }
+
+        function performLogout() {
+            // Clear local storage so they stay logged out!
+            localStorage.removeItem('frogProfile');
+            localStorage.removeItem('frogEmail');
+            
+            if (unsubscribeAdmin) { unsubscribeAdmin(); unsubscribeAdmin = null; }
+            if (unsubscribeChat) { unsubscribeChat(); unsubscribeChat = null; }
+            
+            window.frogApp.profileName = 'Guest Frog';
+            window.frogApp.isVerifiedDuo = false;
+            window.frogApp.isPondCrew = false;
+            document.getElementById('userDisplay').innerText = 'Guest Frog';
+            document.getElementById('userRank').innerText = 'Tadpole';
+            
+            document.getElementById('authDot').classList.replace('bg-frog', 'bg-zinc-600');
+            document.getElementById('authDot').classList.replace('border-white', 'border-zinc-900');
+            
+            document.getElementById('authEmail').value = '';
+            document.getElementById('authPass').value = '';
+            
+            // Remove Admin Panel button just in case
+            document.getElementById('adminPanelBtn').classList.add('hidden');
+            
+            toggleModal('profileModal');
+        }
+
+        // Setup hook carefully waiting for full initialization
+        const startApp = (user) => {
+            // Check if they were previously logged in
+            const savedEmail = localStorage.getItem('frogEmail');
+            const savedProfile = localStorage.getItem('frogProfile');
+
+            if (savedEmail && savedProfile) {
+                window.frogApp.profileName = savedProfile;
+                window.frogApp.isVerifiedDuo = (savedEmail === 'smithpearson79@gmail.com');
+                window.frogApp.isPondCrew = (savedEmail === 'artistlnf441@gmail.com' || savedEmail === 'smithpearson79@gmail.com');
+                
+                document.getElementById('authDot').classList.replace('bg-zinc-600', 'bg-frog');
+                document.getElementById('authDot').classList.replace('border-zinc-900', 'border-white');
+                
+                const spinningBadgeHTML = `<span class="relative w-4 h-4 ml-1.5 flex items-center justify-center shrink-0" title="Verified Duo"><span class="absolute inset-0 bg-frog/20 rounded-full scale-110"></span><svg viewBox="0 0 100 100" class="absolute inset-0 w-full h-full badge-spin fill-frog/20"><path d="M50 5 L55 35 L85 30 L65 50 L85 70 L55 65 L50 95 L45 65 L15 70 L35 50 L15 30 L45 35 Z"></path></svg><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="w-2.5 h-2.5 text-frog relative z-10"><polyline points="20 6 9 17 4 12"></polyline></svg></span>`;
+                const pondCrewBadgeHTML = `<span class="relative w-4 h-4 ml-1.5 flex items-center justify-center shrink-0 text-blue-500 drop-shadow-sm" title="Pond Crew"><span class="absolute inset-0 bg-blue-500/20 rounded-full scale-110"></span><svg viewBox="0 0 100 100" class="absolute inset-0 w-full h-full badge-spin fill-blue-500/20"><path d="M50 5 L55 35 L85 30 L65 50 L85 70 L55 65 L50 95 L45 65 L15 70 L35 50 L15 30 L45 35 Z"></path></svg><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" class="w-2.5 h-2.5 relative z-10"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg></span>`;
+
+                if (window.frogApp.isVerifiedDuo && window.frogApp.isPondCrew) {
+                    document.getElementById('userRank').innerHTML = `Verified Duo & Crew ${spinningBadgeHTML}${pondCrewBadgeHTML}`;
+                } else if (window.frogApp.isVerifiedDuo) {
+                    document.getElementById('userRank').innerHTML = `Verified Duo ${spinningBadgeHTML}`;
+                } else if (window.frogApp.isPondCrew) {
+                    document.getElementById('userRank').innerHTML = `Pond Crew ${pondCrewBadgeHTML}`;
+                } else {
+                    document.getElementById('userRank').innerHTML = 'Froggy Friend';
+                }
+                
+                // Show Admin Panel Button for Smith Pearson automatically
+                if (savedEmail === 'smithpearson79@gmail.com') {
+                    document.getElementById('adminPanelBtn').classList.remove('hidden');
+                    initAdminListener(); // Start tracking live accounts immediately
+                } else {
+                    // Automatically log this account since it's not the admin
+                    recordAccount(savedEmail, savedProfile);
+                }
+
+                // Trigger the one-time welcome alert if they auto-logged in and haven't seen it
+                if (!localStorage.getItem('welcomed_' + savedProfile)) {
+                    localStorage.setItem('welcomed_' + savedProfile, 'true');
+                    setTimeout(() => toggleModal('welcomeAlertModal'), 800);
+                }
+
+                // Trigger the one-time Pond Crew alert if they auto-logged in and haven't seen it
+                if (window.frogApp.isPondCrew && !localStorage.getItem('crew_welcomed_' + savedProfile)) {
+                    localStorage.setItem('crew_welcomed_' + savedProfile, 'true');
+                    setTimeout(() => toggleModal('pondCrewAlertModal'), 900);
+                }
+            } else {
+                // If they are literally just a brand new guest, we do not count them as an account yet.
+            }
+
+            document.getElementById('userDisplay').innerText = window.frogApp.profileName;
+            document.getElementById('userUid').innerText = user.uid;
+            
+            // Start listening to live chat updates safely
+            initChatListener();
+        };
+
+        window.onAppReady = startApp;
+        
+        // Failsafe in case auth finishes before script execution
+        if (window.frogApp && window.frogApp.user) {
+            startApp(window.frogApp.user);
+        }
+    </script>
+</body>
+</html>        window.frogApp = {
             auth,
             db,
             appId,
