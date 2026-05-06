@@ -160,13 +160,14 @@
     <nav class="fixed top-0 w-full z-50 px-4 md:px-6 py-4 md:py-6">
         <div class="max-w-7xl mx-auto flex justify-between items-center glass rounded-2xl md:rounded-3xl px-4 md:px-6 py-3 md:py-4 border border-zinc-800 shadow-sm">
             <div class="flex items-center gap-2 md:gap-3">
-                <svg viewBox="0 0 100 100" class="w-6 h-6 md:w-8 md:h-8 fill-frog">
-                    <circle cx="30" cy="40" r="12" /><circle cx="70" cy="40" r="12" />
-                    <path d="M10 50 Q50 90 90 50 L80 40 L20 40 Z" />
+                <svg viewBox="0 0 100 100" class="w-6 h-6 md:w-8 md:h-8 fill-frog shrink-0">
+                    <path d="M 5 70 C 5 95 95 95 95 70 C 95 45 60 50 50 65 C 40 50 5 45 5 70 Z" opacity="0.4"/>
+                    <circle cx="30" cy="55" r="14" /><circle cx="22" cy="42" r="6" /><circle cx="38" cy="42" r="6" />
+                    <circle cx="70" cy="55" r="14" /><circle cx="62" cy="42" r="6" /><circle cx="78" cy="42" r="6" />
                 </svg>
                 <div class="flex items-center gap-1 md:gap-2">
-                    <span class="font-extrabold tracking-tighter text-base md:text-xl uppercase text-white">Speckle Frogs.</span>
-                    <button onclick="toggleModal('verifyModal')" class="relative w-5 h-5 md:w-6 md:h-6 flex items-center justify-center group cursor-pointer focus:outline-none">
+                    <span class="font-extrabold tracking-tighter text-sm sm:text-base md:text-xl uppercase text-white">Speckle Frogs.</span>
+                    <button onclick="toggleModal('verifyModal')" class="relative w-5 h-5 md:w-6 md:h-6 flex items-center justify-center group cursor-pointer focus:outline-none shrink-0">
                         <div class="absolute inset-0 bg-frog/20 rounded-full scale-110"></div>
                         <svg viewBox="0 0 100 100" class="absolute inset-0 w-full h-full badge-spin fill-frog/20">
                             <path d="M50 5 L55 35 L85 30 L65 50 L85 70 L55 65 L50 95 L45 65 L15 70 L35 50 L15 30 L45 35 Z" />
@@ -210,34 +211,35 @@
     </nav>
 
     <!-- Support Bubble Frog Button -->
-    <div class="fixed bottom-6 right-6 z-[60] flex flex-col items-end gap-4">
+    <div class="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-[60] flex flex-col items-end gap-4">
         <!-- Chat Window -->
-        <div id="supportWindow" class="hidden scale-90 opacity-0 origin-bottom-right transition-all duration-300 bg-zinc-900 w-[320px] rounded-[2rem] shadow-2xl border border-zinc-800 overflow-hidden mb-2">
+        <div id="supportWindow" class="hidden scale-90 opacity-0 origin-bottom-right transition-all duration-300 bg-zinc-900 w-[calc(100vw-2rem)] sm:w-[350px] max-w-sm rounded-[2rem] shadow-2xl border border-zinc-800 overflow-hidden mb-2">
             <div class="bg-frog p-4 text-white shadow-md relative z-10 border-b border-frog/50">
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
                         <svg viewBox="0 0 100 100" class="w-6 h-6 fill-white">
-                            <circle cx="30" cy="40" r="12" /><circle cx="70" cy="40" r="12" />
-                            <path d="M10 50 Q50 90 90 50 L80 40 L20 40 Z" />
+                            <path d="M 5 70 C 5 95 95 95 95 70 C 95 45 60 50 50 65 C 40 50 5 45 5 70 Z" opacity="0.4"/>
+                            <circle cx="30" cy="55" r="14" /><circle cx="22" cy="42" r="6" /><circle cx="38" cy="42" r="6" />
+                            <circle cx="70" cy="55" r="14" /><circle cx="62" cy="42" r="6" /><circle cx="78" cy="42" r="6" />
                         </svg>
                     </div>
                     <div>
-                        <h4 class="font-bold leading-none text-lg text-white">Lilypad Chat</h4>
-                        <span class="text-[9px] opacity-90 uppercase tracking-widest font-black text-white">Live Pond Updates</span>
+                        <h4 class="font-bold leading-none text-lg text-white">FrogService</h4>
+                        <span class="text-[9px] opacity-90 uppercase tracking-widest font-black text-white">Customer Support</span>
                     </div>
                 </div>
             </div>
             
             <!-- Messages Area -->
-            <div id="chatMessages" class="h-64 overflow-y-auto p-4 bg-zinc-950 flex flex-col gap-3">
-                <div class="text-center text-xs text-zinc-500 italic my-auto">Connecting to the pond...</div>
+            <div id="chatMessages" class="h-[50vh] sm:h-72 overflow-y-auto p-4 bg-zinc-950 flex flex-col gap-3 clean-scrollbar">
+                <div class="text-center text-xs text-zinc-500 italic my-auto">Connecting to FrogService...</div>
             </div>
 
             <!-- Input Area -->
             <div class="p-4 bg-zinc-900 border-t border-zinc-800">
                 <div class="flex flex-col gap-2">
-                    <textarea id="chatInput" placeholder="Send a croak..." class="w-full h-12 p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm resize-none focus:bg-zinc-800 focus:border-frog text-white transition-colors placeholder-zinc-600" onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); window.sendChatMessage(); }"></textarea>
-                    <button onclick="window.sendChatMessage()" class="w-full py-2.5 bg-white text-zinc-950 rounded-xl text-sm font-bold hover:bg-frog hover:text-white transition-colors shadow-sm">Send Croak</button>
+                    <textarea id="chatInput" placeholder="How can we help you today?" class="w-full h-12 p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-sm resize-none focus:bg-zinc-800 focus:border-frog text-white transition-colors placeholder-zinc-600" onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); window.sendChatMessage(); }"></textarea>
+                    <button onclick="window.sendChatMessage()" class="w-full py-2.5 bg-white text-zinc-950 rounded-xl text-sm font-bold hover:bg-frog hover:text-white transition-colors shadow-sm">Send Message</button>
                 </div>
             </div>
         </div>
@@ -250,10 +252,11 @@
             
             <!-- Main Button Body -->
             <div class="relative w-16 h-16 bg-frog rounded-full flex items-center justify-center shadow-lg shadow-frog/30 group-hover:scale-110 transition-transform border-2 border-zinc-950">
-                <!-- Frog Face Icon -->
+                <!-- Double Frog Lilypad Icon -->
                 <svg viewBox="0 0 100 100" class="w-10 h-10 fill-white">
-                    <circle cx="30" cy="40" r="12" /><circle cx="70" cy="40" r="12" />
-                    <path d="M10 50 Q50 90 90 50 L80 40 L20 40 Z" />
+                    <path d="M 5 70 C 5 95 95 95 95 70 C 95 45 60 50 50 65 C 40 50 5 45 5 70 Z" opacity="0.4"/>
+                    <circle cx="30" cy="55" r="14" /><circle cx="22" cy="42" r="6" /><circle cx="38" cy="42" r="6" />
+                    <circle cx="70" cy="55" r="14" /><circle cx="62" cy="42" r="6" /><circle cx="78" cy="42" r="6" />
                 </svg>
                 <!-- Notification Dot -->
                 <div class="absolute top-0 right-0 w-4 h-4 bg-zinc-950 border-4 border-frog rounded-full"></div>
@@ -290,8 +293,9 @@
                     <!-- Decorative Background SVG -->
                     <div class="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity">
                         <svg viewBox="0 0 100 100" class="w-32 h-32 fill-frog">
-                            <circle cx="30" cy="40" r="12" /><circle cx="70" cy="40" r="12" />
-                            <path d="M10 50 Q50 90 90 50 L80 40 L20 40 Z" />
+                            <path d="M 5 70 C 5 95 95 95 95 70 C 95 45 60 50 50 65 C 40 50 5 45 5 70 Z" opacity="0.4"/>
+                            <circle cx="30" cy="55" r="14" /><circle cx="22" cy="42" r="6" /><circle cx="38" cy="42" r="6" />
+                            <circle cx="70" cy="55" r="14" /><circle cx="62" cy="42" r="6" /><circle cx="78" cy="42" r="6" />
                         </svg>
                     </div>
                     
@@ -369,9 +373,9 @@
     </div>
 
     <div id="authModal" class="fixed inset-0 z-[100] modal-overlay items-center justify-center p-4" onclick="closeOnOverlay(event, 'authModal')">
-        <div class="bg-zinc-900 rounded-[2.5rem] w-full max-w-sm p-8 md:p-10 shadow-2xl relative border border-zinc-800">
+        <div class="bg-zinc-900 rounded-[2.5rem] w-full max-w-sm p-6 sm:p-8 md:p-10 shadow-2xl relative border border-zinc-800 max-h-[90vh] overflow-y-auto clean-scrollbar">
             <h3 id="authTitle" class="text-2xl md:text-3xl font-extrabold tracking-tight mb-2 text-white">Join the Pond</h3>
-            <p class="text-zinc-400 text-sm mb-6 md:mb-8 italic font-semibold">"High fives only inside."</p>
+            <p class="text-zinc-400 text-sm mb-5 md:mb-8 italic font-semibold">"High fives only inside."</p>
             <div class="space-y-3 md:space-y-4">
                 <input type="email" id="authEmail" placeholder="Froggy Email" class="w-full px-5 md:px-6 py-3.5 md:py-4 bg-zinc-950 border border-zinc-800 text-white rounded-xl md:rounded-2xl font-medium focus:border-frog focus:bg-zinc-900 transition-colors placeholder-zinc-600">
                 <input type="password" id="authPass" placeholder="Secret Croak" class="w-full px-5 md:px-6 py-3.5 md:py-4 bg-zinc-950 border border-zinc-800 text-white rounded-xl md:rounded-2xl font-medium focus:border-frog focus:bg-zinc-900 transition-colors placeholder-zinc-600">
@@ -393,8 +397,9 @@
                 <div class="w-20 h-20 bg-zinc-800 rounded-2xl p-1.5 mx-auto shadow-xl mb-4 border border-zinc-700">
                     <div class="w-full h-full bg-moss rounded-xl flex items-center justify-center overflow-hidden border border-frog/20">
                         <svg viewBox="0 0 100 100" class="w-12 h-12 fill-frog">
-                            <circle cx="30" cy="40" r="12" /><circle cx="70" cy="40" r="12" />
-                            <path d="M10 50 Q50 90 90 50 L80 40 L20 40 Z" />
+                            <path d="M 5 70 C 5 95 95 95 95 70 C 95 45 60 50 50 65 C 40 50 5 45 5 70 Z" opacity="0.4"/>
+                            <circle cx="30" cy="55" r="14" /><circle cx="22" cy="42" r="6" /><circle cx="38" cy="42" r="6" />
+                            <circle cx="70" cy="55" r="14" /><circle cx="62" cy="42" r="6" /><circle cx="78" cy="42" r="6" />
                         </svg>
                     </div>
                 </div>
@@ -416,26 +421,40 @@
     </div>
 
     <!-- Hero Section -->
-    <section class="relative pt-32 md:pt-44 pb-16 md:pb-20 px-4 md:px-6 overflow-hidden">
-        <div class="max-w-7xl mx-auto grid lg:grid-cols-2 gap-12 items-center">
+    <section class="relative pt-28 sm:pt-32 md:pt-44 pb-12 sm:pb-16 md:pb-20 px-4 md:px-6 overflow-hidden">
+        <div class="max-w-7xl mx-auto grid lg:grid-cols-2 gap-8 md:gap-12 items-center">
             <div class="z-20 relative text-center lg:text-left">
                 <div class="inline-block px-3 py-1 bg-moss text-frog rounded-full text-[8px] md:text-[10px] font-black uppercase tracking-widest mb-4 md:mb-6 border border-frog/20">London's Friendly Giant Frogs</div>
-                <h1 class="text-5xl sm:text-6xl md:text-8xl lg:text-9xl font-extrabold tracking-tighter leading-[0.85] mb-6 md:mb-8 text-white">
+                <h1 class="text-4xl sm:text-6xl md:text-8xl lg:text-9xl font-extrabold tracking-tighter leading-tight md:leading-[0.85] mb-6 md:mb-8 text-white">
                     Double the <span class="text-frog">Frogs.</span><br>
                     Double the <span class="text-zinc-500">Joy.</span>
                 </h1>
-                <p class="text-base md:text-xl text-zinc-400 max-w-lg mx-auto lg:mx-0 leading-relaxed mb-8 md:mb-10 font-medium px-4 md:px-0">
+                <p class="text-sm sm:text-base md:text-xl text-zinc-400 max-w-lg mx-auto lg:mx-0 leading-relaxed mb-8 md:mb-10 font-medium px-2 md:px-0">
                     Meet <span class="text-white font-bold underline decoration-frog/50 decoration-2">Tiddles</span> and <span class="text-white font-bold underline decoration-frog/50 decoration-2">Speckle</span>: two teenagers in blow-up suits with a single mission to make you smile.
                 </p>
-                <a href="#habitat" class="w-full sm:w-auto px-10 md:px-12 py-4 md:py-5 bg-frog text-white rounded-xl md:rounded-2xl font-bold text-base md:text-lg inline-block shadow-xl shadow-frog/20 hover:scale-105 transition-transform">Visit our Pond</a>
+                <a href="#habitat" class="w-full sm:w-auto px-8 sm:px-10 md:px-12 py-4 md:py-5 bg-frog text-white rounded-xl md:rounded-2xl font-bold text-base md:text-lg inline-block shadow-xl shadow-frog/20 hover:scale-105 transition-transform">Visit our Pond</a>
             </div>
 
             <!-- Mobile-Adjusted Hero Art -->
             <div class="relative h-[280px] md:h-[400px] flex justify-center items-center">
                 <div class="absolute w-full h-full bg-frog/10 blur-[80px] md:blur-[120px] rounded-full"></div>
                 <div class="relative w-full max-w-[280px] md:max-w-md flex items-center justify-center">
-                    <div class="frog-float-delayed absolute left-0 opacity-20"><svg viewBox="0 0 200 200" class="w-32 md:w-48 h-32 md:h-48 fill-frog/50"><ellipse cx="100" cy="110" rx="80" ry="65"/><circle cx="60" cy="60" r="25"/><circle cx="140" cy="60" r="25"/></svg></div>
-                    <div class="frog-float relative z-10"><svg viewBox="0 0 200 200" class="w-48 md:w-72 h-48 md:h-72 fill-frog drop-shadow-2xl"><ellipse cx="100" cy="110" rx="80" ry="65"/><circle cx="60" cy="60" r="25"/><circle cx="140" cy="60" r="25"/><circle cx="60" cy="60" r="8" fill="white"/><circle cx="140" cy="60" r="8" fill="white"/></svg></div>
+                    <div class="frog-float-delayed absolute left-0 opacity-20">
+                        <svg viewBox="0 0 200 200" class="w-32 md:w-48 h-32 md:h-48 fill-frog/50">
+                            <path d="M 10 140 C 10 190 190 190 190 140 C 190 90 120 100 100 130 C 80 100 10 90 10 140 Z" opacity="0.4" />
+                            <circle cx="60" cy="110" r="28" /><circle cx="44" cy="84" r="12" /><circle cx="76" cy="84" r="12" />
+                            <circle cx="140" cy="110" r="28" /><circle cx="124" cy="84" r="12" /><circle cx="156" cy="84" r="12" />
+                        </svg>
+                    </div>
+                    <div class="frog-float relative z-10">
+                        <svg viewBox="0 0 200 200" class="w-48 md:w-72 h-48 md:h-72 fill-frog drop-shadow-2xl">
+                            <path d="M 10 140 C 10 190 190 190 190 140 C 190 90 120 100 100 130 C 80 100 10 90 10 140 Z" opacity="0.4" />
+                            <circle cx="60" cy="110" r="28" /><circle cx="44" cy="84" r="12" /><circle cx="76" cy="84" r="12" />
+                            <circle cx="44" cy="84" r="4" fill="white" /><circle cx="76" cy="84" r="4" fill="white" />
+                            <circle cx="140" cy="110" r="28" /><circle cx="124" cy="84" r="12" /><circle cx="156" cy="84" r="12" />
+                            <circle cx="124" cy="84" r="4" fill="white" /><circle cx="156" cy="84" r="4" fill="white" />
+                        </svg>
+                    </div>
                 </div>
             </div>
         </div>
@@ -458,13 +477,13 @@
 
             <div class="space-y-12 md:space-y-16 text-center">
                 <div class="max-w-3xl mx-auto space-y-8 md:space-y-10 px-2">
-                    <p class="text-xl sm:text-2xl md:text-5xl font-extrabold tracking-tight leading-tight text-white">
+                    <p class="text-lg sm:text-2xl md:text-5xl font-extrabold tracking-tight leading-tight text-white">
                         "When Tiddles and Speckle put the suits on, <span class="text-frog italic">our problems disappear.</span>"
                     </p>
-                    <p class="text-xl sm:text-2xl md:text-5xl font-extrabold tracking-tight leading-tight text-zinc-500">
+                    <p class="text-lg sm:text-2xl md:text-5xl font-extrabold tracking-tight leading-tight text-zinc-500">
                         "In a world that can be heavy, we chose to be <span class="text-zinc-200">light and inflatable.</span>"
                     </p>
-                    <p class="text-xl sm:text-2xl md:text-5xl font-extrabold tracking-tight leading-tight italic decoration-frog decoration-wavy decoration-2 text-white">
+                    <p class="text-lg sm:text-2xl md:text-5xl font-extrabold tracking-tight leading-tight italic decoration-frog decoration-wavy decoration-2 text-white">
                         "If you see a giant frog, the universe is giving you a break."
                     </p>
                 </div>
@@ -679,7 +698,7 @@
             const chatBox = document.getElementById('chatMessages');
             
             if (messages.length === 0) {
-                chatBox.innerHTML = '<div class="text-center text-xs text-zinc-500 italic my-auto">The pond is quiet. Be the first to croak!</div>';
+                chatBox.innerHTML = '<div class="text-center text-xs text-zinc-500 italic my-auto">Welcome to FrogService!<br>How can we help you today?</div>';
                 return;
             }
 
